@@ -83,6 +83,9 @@ def after_ckan_json_to_group(group, state = None):
             sub_groups.append(sub_group)
         group['groups'] = sub_groups
 
+    if not group.get('packages'):
+        return None, None
+
     if group.get('private', False) or group.get('capacity') == u'private':
         return None, None
 
