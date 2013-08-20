@@ -32,6 +32,8 @@ http://catalogue.datalocale.fr/
 
 import argparse
 import ConfigParser
+import cStringIO
+import csv
 import json
 import logging
 import os
@@ -274,9 +276,14 @@ def main():
             continue
         for resource in (organization_package.get('resources') or []):
             response = urllib2.urlopen(resource['url'])
-            packages = json.loads(response.read())
-            for package in packages:
-                existing_packages_name.add(package['name'])
+            packages_csv_reader = csv.reader(response, delimiter = ';', quotechar = '"')
+            packages_csv_reader.next()
+            for row in packages_csv_reader:
+                package_infos = dict(
+                    (key, value.decode('utf-8'))
+                    for key, value in zip(['title', 'name', 'source_name'], row)
+                    )
+                existing_packages_name.add(package_infos['name'])
 
     # Retrieve names of groups in source.
     request = urllib2.Request(urlparse.urljoin(source_site_url, '/api/3/action/group_list'),
@@ -467,10 +474,23 @@ def main():
         organization_package_name = strings.slugify(organization_package_title)[:100]
         organization_packages = packages_by_organization_name.get(organization_name)
         if organization_packages:
-            organization_package_json_str = unicode(json.dumps(organization_packages,
-                encoding = 'utf-8', ensure_ascii = False, indent = 2)).encode('utf-8')
+            log.info(u'Creating package: {}'.format(organization_package_name))
+            organization_packages_file = cStringIO.StringIO()
+            organization_packages_csv_writer = csv.writer(organization_packages_file, delimiter = ';', quotechar = '"',
+                quoting = csv.QUOTE_MINIMAL)
+            organization_packages_csv_writer.writerow([
+                'Titre',
+                'Nom',
+                'Nom original',
+                ])
+            for organization_package in organization_packages:
+                organization_packages_csv_writer.writerow([
+                    organization_package['title'].encode('utf-8'),
+                    organization_package['name'].encode('utf-8'),
+                    package_source_name_by_name[organization_package['name']].encode('utf-8'),
+                    ])
             file_metadata = filestores.upload_file(target_site_url, organization_package_name,
-                organization_package_json_str, ckan_headers)
+                organization_packages_file.getvalue(), ckan_headers)
 
             organization_package = dict(
                 author = supplier['title'],
@@ -484,7 +504,7 @@ Les jeux de données fournis par {} pour data.gouv.fr.
                 resources = [
                     dict(
                         created = file_metadata['_creation_date'],
-                        format = 'JSON',
+                        format = 'CSV',
                         hash = file_metadata['_checksum'],
                         last_modified = file_metadata['_last_modified'],
                         name = organization_package_name + u'.json',
