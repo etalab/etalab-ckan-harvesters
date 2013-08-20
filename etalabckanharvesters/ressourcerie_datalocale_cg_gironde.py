@@ -326,6 +326,7 @@ def main():
         if group_name in excluded_organizations_name:
             continue
         organization = conv.check(group_to_organization_ckan_json)(group, state = conv.default_state)
+        set_extra(organization, 'harvest_app_name', app_name)
         log.info(u'Upserting organization: {}'.format(organization['title']))
         organization = upsert_organization(target_site_url, organization)
         organization_by_name[organization['name']] = organization
@@ -341,8 +342,10 @@ def main():
         conv.not_none,
         ))(response_dict['result'], state = conv.default_state)
 
+    # Retrieve packages from source.
     organization_name_by_package_name = {}
     package_by_name = {}
+    package_source_name_by_name = {}
     for package_source_name in packages_source_name:
         request = urllib2.Request(urlparse.urljoin(source_site_url, '/api/3/action/package_show'),
             headers = ckan_headers)
@@ -359,18 +362,29 @@ def main():
         if package is None:
             continue
         for group in (package.get('groups') or []):
+            if group['name'] in excluded_organizations_name:
+                # Don't import packages from excluded organizations.
+                log.info(u'Ignoring harvested package: {}'.format(package['title']))
+                package = None
+                break
             organization = organization_by_source_name.get(group['name'])
             if organization is not None:
                 break
         else:
             organization = supplier
+        if package is None:
+            continue
         package['owner_org'] = organization['id']
         package.pop('groups', None)
-        package['name'] = package_name = strings.slugify(package['title'])[:100]
+        set_extra(package, 'harvest_app_name', app_name)
+        package_name = strings.slugify(package['title'])[:100]
+        package_source_name_by_name[package_name] = package['name']
+        package['name'] = package_name
         package_by_name[package_name] = package
         organization_name_by_package_name[package_name] = organization['name']
         log.info(u'Harvested package: {}'.format(package['title']))
 
+    # Upsert source packages to target.
     packages_by_organization_name = {}
     for package_name, package in package_by_name.iteritems():
         if package_name in existing_packages_name:
@@ -460,13 +474,13 @@ def main():
 
     for package_name in existing_packages_name:
         # Retrieve package id (needed for delete).
+        log.info(u'Deleting package: {}'.format(package_name))
         request = urllib2.Request(urlparse.urljoin(target_site_url,
             '/api/3/action/package_show?id={}'.format(package_name)), headers = ckan_headers)
         response = urllib2.urlopen(request)
         response_dict = json.loads(response.read())
         existing_package = response_dict['result']
 
-        # TODO: To replace with package_purge when it is available.
         request = urllib2.Request(urlparse.urljoin(target_site_url,
             '/api/3/action/package_delete?id={}'.format(package_name)), headers = ckan_headers)
         response = urllib2.urlopen(request, urllib.quote(json.dumps(existing_package)))
@@ -500,7 +514,12 @@ def main():
 
             organization_package = dict(
                 author = supplier['title'],
-#                extras = extras,
+                extras = [
+                    dict(
+                        key = 'harvest_app_name',
+                        value = app_name,
+                        ),
+                    ],
                 license_id = 'fr-lo',
                 name = organization_package_name,
                 notes = u'''\
@@ -574,6 +593,19 @@ Les jeux de données fournis par {} pour data.gouv.fr.
 #        pprint.pprint(deleted_package)
 
     return 0
+
+
+def set_extra(instance, key, value):
+    if instance.get('extras') is None:
+        instance['extras'] = []
+    for extra in instance['extras']:
+        if extra['key'] == key:
+            extra['value'] = value
+            return
+    instance['extras'].append(dict(
+        key = key,
+        value = value,
+        ))
 
 
 def upsert_organization(target_site_url, organization):
