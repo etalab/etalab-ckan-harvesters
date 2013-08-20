@@ -261,6 +261,7 @@ def main():
     organization_by_name[supplier_name] = supplier
 
     existing_packages_name = set()
+    existing_supplier_packages_name = set()
     for organization_package in (supplier.get('packages') or []):
         request = urllib2.Request(urlparse.urljoin(target_site_url,
             '/api/3/action/package_show?id={}'.format(organization_package['name'])), headers = ckan_headers)
@@ -277,6 +278,7 @@ def main():
         else:
             # This dataset doesn't contain a list of datasets. Ignore it.
             continue
+        existing_supplier_packages_name.add(organization_package['name'])
         for resource in (organization_package.get('resources') or []):
             response = urllib2.urlopen(resource['url'])
             packages_csv_reader = csv.reader(response, delimiter = ';', quotechar = '"')
@@ -475,6 +477,7 @@ def main():
     for organization_name, organization in organization_by_name.iteritems():
         organization_package_title = u'Jeux de données - {}'.format(organization['title'])
         organization_package_name = strings.slugify(organization_package_title)[:100]
+        existing_supplier_packages_name.discard(organization_package_name)
         organization_packages = packages_by_organization_name.get(organization_name)
         if organization_packages:
             log.info(u'Creating package: {}'.format(organization_package_name))
@@ -534,7 +537,41 @@ Les jeux de données fournis par {} pour data.gouv.fr.
             upsert_package(target_site_url, organization_package)
         else:
             # Delete dataset if it exists.
-            pass
+            log.info(u'Deleting package: {}'.format(organization_package_name))
+
+            # Retrieve package id (needed for delete).
+            request = urllib2.Request(urlparse.urljoin(conf['ckan.site_url'],
+                '/api/3/action/package_show?id={}'.format(organization_package_name)), headers = ckan_headers)
+            response = urllib2.urlopen(request)
+            response_dict = json.loads(response.read())
+            existing_package = response_dict['result']
+
+            # TODO: To replace with package_purge when it is available.
+            request = urllib2.Request(urlparse.urljoin(conf['ckan.site_url'],
+                '/api/3/action/package_delete?id={}'.format(organization_package_name)), headers = ckan_headers)
+            response = urllib2.urlopen(request, urllib.quote(json.dumps(existing_package)))
+            response_dict = json.loads(response.read())
+#            deleted_package = response_dict['result']
+#            pprint.pprint(deleted_package)
+
+    for organization_package_name in existing_supplier_packages_name:
+        # Delete dataset if it exists.
+        log.info(u'Deleting package: {}'.format(organization_package_name))
+
+        # Retrieve package id (needed for delete).
+        request = urllib2.Request(urlparse.urljoin(conf['ckan.site_url'],
+            '/api/3/action/package_show?id={}'.format(organization_package_name)), headers = ckan_headers)
+        response = urllib2.urlopen(request)
+        response_dict = json.loads(response.read())
+        existing_package = response_dict['result']
+
+        # TODO: To replace with package_purge when it is available.
+        request = urllib2.Request(urlparse.urljoin(conf['ckan.site_url'],
+            '/api/3/action/package_delete?id={}'.format(organization_package_name)), headers = ckan_headers)
+        response = urllib2.urlopen(request, urllib.quote(json.dumps(existing_package)))
+        response_dict = json.loads(response.read())
+#        deleted_package = response_dict['result']
+#        pprint.pprint(deleted_package)
 
     return 0
 
