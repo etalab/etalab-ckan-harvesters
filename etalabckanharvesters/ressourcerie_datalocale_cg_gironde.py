@@ -520,7 +520,7 @@ def main():
                         value = app_name,
                         ),
                     ],
-                license_id = 'fr-lo',
+                license_id = 'odbl',
                 name = organization_package_name,
                 notes = u'''\
 Les jeux de données fournis par {} pour data.gouv.fr.
