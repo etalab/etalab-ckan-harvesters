@@ -43,9 +43,9 @@ import urllib2
 import urlparse
 
 from biryani1 import baseconv, custom_conv, states, strings
-
 from ckantoolbox import ckanconv, filestores
 
+from . import helpers
 
 app_name = os.path.splitext(os.path.basename(__file__))[0]
 ckan_headers = None
@@ -235,22 +235,22 @@ def before_ckan_json_to_package(package, state = None):
     if package.get('extras'):
         package['extras'] = package['extras'][:]
 
-    value = get_extra(package, 'dcat:granularity', None)
+    value = helpers.get_extra(package, 'dcat:granularity', None)
     if value is not None:
         value = json.loads(value)
-    value = {
-        u"canton": u"canton",
-        u"commune": u"commune",
-        u"ilot iris": u"commune",
-        u"point d'intérêt": u"commune",
-        u"points d'intérêt": u"commune",
-        }.get(value, None)
-    if value is not None:
-        pop_extra(package, 'dcat:granularity')
-        assert package.get('territorial_coverage_granularity') is None, package
-        package['territorial_coverage_granularity'] = value
+        value = {
+            u"canton": u"canton",
+            u"commune": u"commune",
+            u"ilot iris": u"commune",
+            u"point d'intérêt": u"commune",
+            u"points d'intérêt": u"commune",
+            }.get(value)
+        if value is not None:
+            helpers.pop_extra(package, 'dcat:granularity')
+            assert package.get('territorial_coverage_granularity') is None, package
+            package['territorial_coverage_granularity'] = value
 
-    value = pop_extra(package, 'dct:contributor', None)
+    value = helpers.pop_extra(package, 'dct:contributor', None)
     if value is not None:
         value = json.loads(value)
     if value is not None:
@@ -283,15 +283,6 @@ def before_ckan_json_to_package(package, state = None):
                 ))
 
     return package, None
-
-
-def get_extra(instance, key, default = UnboundLocalError):
-    for extra in (instance.get('extras') or []):
-        if extra['key'] == key:
-            return extra.get('value')
-    if default is UnboundLocalError:
-        raise KeyError(key)
-    return default
 
 
 def group_to_organization_ckan_json(group, state = None):
@@ -427,7 +418,7 @@ def main():
         if group_name in excluded_organizations_name:
             continue
         organization = conv.check(group_to_organization_ckan_json)(group, state = conv.default_state)
-        set_extra(organization, 'harvest_app_name', app_name)
+        helpers.set_extra(organization, 'harvest_app_name', app_name)
         log.info(u'Upserting organization: {}'.format(organization['title']))
         organization = upsert_organization(target_site_url, organization)
         organization_by_name[organization['name']] = organization
@@ -484,8 +475,8 @@ def main():
             continue
         package['owner_org'] = organization['id']
         package.pop('groups', None)
-        set_extra(package, 'harvest_app_name', app_name)
-        set_extra(package, 'supplier_id', supplier['id'])
+        helpers.set_extra(package, 'harvest_app_name', app_name)
+        helpers.set_extra(package, 'supplier_id', supplier['id'])
         package_name = strings.slugify(package['title'])[:100]
         package_source_name_by_name[package_name] = package['name']
         package['name'] = package_name
@@ -703,29 +694,6 @@ Les jeux de données fournis par {} pour data.gouv.fr.
 #        pprint.pprint(deleted_package)
 
     return 0
-
-
-def pop_extra(instance, key, default = UnboundLocalError):
-    for index, extra in enumerate(instance.get('extras') or []):
-        if extra['key'] == key:
-            del instance['extras'][index]
-            return extra.get('value')
-    if default is UnboundLocalError:
-        raise KeyError(key)
-    return default
-
-
-def set_extra(instance, key, value):
-    if instance.get('extras') is None:
-        instance['extras'] = []
-    for extra in instance['extras']:
-        if extra['key'] == key:
-            extra['value'] = value
-            return
-    instance['extras'].append(dict(
-        key = key,
-        value = value,
-        ))
 
 
 def upsert_organization(target_site_url, organization):
