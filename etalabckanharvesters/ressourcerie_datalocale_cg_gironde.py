@@ -371,6 +371,13 @@ def main():
             if organization is not None:
                 break
         else:
+            log.warning(u'''Package: "{}" doesn't belong to any organization group, but to {}'''.format(
+                package['title'],
+                u', '.join(
+                    u'{} ({})'.format(group['name'], group['title']) if group.get('title') else group['name']
+                    for group in (package.get('groups') or [])
+                    ),
+                ))
             organization = supplier
         if package is None:
             continue
