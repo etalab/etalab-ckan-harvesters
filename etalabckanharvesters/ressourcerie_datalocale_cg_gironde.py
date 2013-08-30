@@ -105,12 +105,77 @@ def after_ckan_json_to_package(package, state = None):
     if package.get('extras'):
         extras = []
         for extra in package['extras']:
-            extra = extra.copy()
-            value = extra.get('value')
-            if value is None:
+            key = extra['key']
+            if key in (
+                    'ckan_author',  # Ignore source ID of author.
+                    'dct:publisher',  # Ignore source ID of publisher.
+                    ):
                 continue
-            value = json.loads(value)
-            if value in (None, ''):
+            extra = extra.copy()
+            new_key, value_converter = {
+                'dataQuality': (u"Qualité des données", conv.cleanup_line),
+                'dc:source': (u"Source", conv.cleanup_line),
+                'dcat:granularity': (u"Granularité des données", conv.pipe(
+                    conv.cleanup_line,
+#                    conv.test_in([
+#                        u'1/10000',
+#                        u'1:20000',
+#                        u'1/25000',
+#                        u'1:50000',
+#                        u"canton",
+#                        u"chaque événement est un item",
+#                        u"commune",
+#                        u"comptage",
+#                        u"émissions",
+#                        u"horaires théoriques",
+#                        u"ilot iris",
+#                        u"individu",
+#                        u"jeu de données",
+#                        u"m3",
+#                        u"minute",
+#                        u"nombre d'individus supérieur a 5",
+#                        u"nombre de demandeur supérieur a 5",
+#                        u"point d'intérêt",
+#                        u"points d'intérêt",
+#                        u"polyligne",
+#                        u'pourcentage',
+#                        u"structure d'hébergement",
+#                        u"surface agricole en hectares",
+#                        ]),
+                    )),
+                'dct:accrualPeriodicity': (u"Fréquence de mise à jour", conv.pipe(
+                    conv.cleanup_line,
+                    conv.translate({
+                        u'Irrégulier': u"au fil de l'eau",
+                        u'irrégulier': u"au fil de l'eau",
+                        u'irrégulière': u"au fil de l'eau",
+                        u'Irrégulière': u"au fil de l'eau",
+                        }),
+                    conv.test_in([
+                        u"annuelle",
+                        u"au fil de l'eau",
+                        u"bimensuelle",
+                        u"bimestrielle",
+                        u"hebdomadaire",
+                        u"journalier",
+                        u"mensuelle",
+                        u"quotidienne",
+                        u"semestrielle",
+                        u"temps réel",
+                        u"trimestrielle",
+                        ]),
+                    )),
+                'dcterms:references': (u"Références", conv.cleanup_line),
+                }.get(key, (None, conv.cleanup_line))
+            if new_key not in (None, key):
+                extra['key'] = new_key
+            value = extra.get('value')
+            if value is not None:
+                value = json.loads(value)
+            value, error = value_converter(value, state = conv.default_state)
+            if error is not None:
+                log.warning(u"{}: {}. Error: {}".format(key, value, error))
+            if value is None:
                 continue
             extra['value'] = value
             extra.pop('__extras', None)
@@ -157,12 +222,39 @@ def before_ckan_json_to_package(package, state = None):
 
     # Remove fields that are also in extras (in another form).
     for key in (
+            u'dcat:granularity',  # Needed because key will be removed from extras below.
             u'dct:accrualPeriodicity',
             u'dct:accrualPeriodicity-other',
+            u'dct:contributor',  # Needed because key will be removed from extras below.
             u'geographic_granularity',
             u'geographic_granularity-other',
             ):
         package.pop(key, None)
+
+    # Put some extras fields into main fields.
+    if package.get('extras'):
+        package['extras'] = package['extras'][:]
+
+    value = get_extra(package, 'dcat:granularity', None)
+    if value is not None:
+        value = json.loads(value)
+    value = {
+        u"canton": u"canton",
+        u"commune": u"commune",
+        u"ilot iris": u"commune",
+        u"point d'intérêt": u"commune",
+        u"points d'intérêt": u"commune",
+        }.get(value, None)
+    if value is not None:
+        pop_extra(package, 'dcat:granularity')
+        assert package.get('territorial_coverage_granularity') is None, package
+        package['territorial_coverage_granularity'] = value
+
+    value = pop_extra(package, 'dct:contributor', None)
+    if value is not None:
+        value = json.loads(value)
+    if value is not None:
+        package['maintainer'] = value
 
     # Put extension fields into extras.
 
@@ -191,6 +283,15 @@ def before_ckan_json_to_package(package, state = None):
                 ))
 
     return package, None
+
+
+def get_extra(instance, key, default = UnboundLocalError):
+    for extra in (instance.get('extras') or []):
+        if extra['key'] == key:
+            return extra.get('value')
+    if default is UnboundLocalError:
+        raise KeyError(key)
+    return default
 
 
 def group_to_organization_ckan_json(group, state = None):
@@ -384,6 +485,7 @@ def main():
         package['owner_org'] = organization['id']
         package.pop('groups', None)
         set_extra(package, 'harvest_app_name', app_name)
+        set_extra(package, 'supplier_id', supplier['id'])
         package_name = strings.slugify(package['title'])[:100]
         package_source_name_by_name[package_name] = package['name']
         package['name'] = package_name
@@ -479,6 +581,7 @@ def main():
             ))(response_dict['result'], state = conv.default_state)
         packages_by_organization_name.setdefault(organization_name_by_package_name[package_name], []).append(package)
 
+    # Delete obsolete packages.
     for package_name in existing_packages_name:
         # Retrieve package id (needed for delete).
         log.info(u'Deleting package: {}'.format(package_name))
@@ -600,6 +703,16 @@ Les jeux de données fournis par {} pour data.gouv.fr.
 #        pprint.pprint(deleted_package)
 
     return 0
+
+
+def pop_extra(instance, key, default = UnboundLocalError):
+    for index, extra in enumerate(instance.get('extras') or []):
+        if extra['key'] == key:
+            del instance['extras'][index]
+            return extra.get('value')
+    if default is UnboundLocalError:
+        raise KeyError(key)
+    return default
 
 
 def set_extra(instance, key, value):
