@@ -36,7 +36,6 @@ def get_extra(instance, key, default = UnboundLocalError):
     return default
 
 
-
 def pop_extra(instance, key, default = UnboundLocalError):
     for index, extra in enumerate(instance.get('extras') or []):
         if extra['key'] == key:
@@ -58,4 +57,3 @@ def set_extra(instance, key, value):
         key = key,
         value = value,
         ))
-
