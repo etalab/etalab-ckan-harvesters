@@ -539,7 +539,7 @@ Les jeux de données fournis par {} pour data.gouv.fr.
                         format = 'CSV',
                         hash = file_metadata['_checksum'],
                         last_modified = file_metadata['_last_modified'],
-                        name = organization_package_name + u'.json',
+                        name = organization_package_name + u'.txt',
                         size = file_metadata['_content_length'],
                         url = file_metadata['_location'],
 #                        revision_id – (optional)
