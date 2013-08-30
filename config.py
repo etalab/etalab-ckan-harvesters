@@ -5,7 +5,7 @@
 # By: Emmanuel Raviart <emmanuel@raviart.com>
 #
 # Copyright (C) 2013 Emmanuel Raviart
-# http://gitorious.org/etalab/etalab-ckan-harvesters
+# http://github.com/etalab/etalab-ckan-harvesters
 #
 # This file is part of Etalab-CKAN-Harvesters.
 #
@@ -27,7 +27,7 @@ config = {
     'etalab-ckan-harvesters': {
         'ckan.api_key': 'TODO',
         'ckan.site_url': 'http://localhost:5000/',
-        'user_agent': 'Etalab-CKAN-Harvesters/0.1 (https://www.gitorious.org/etalab/etalab-ckan-harvesters bot@etalab2.fr)',
+        'user_agent': 'Etalab-CKAN-Harvesters/0.1 (https://www.github.com/etalab/etalab-ckan-harvesters bot@etalab2.fr)',
         },
     'etalab-ckan-harvesters.enabled': True,
     }
