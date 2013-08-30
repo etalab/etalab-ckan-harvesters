@@ -61,16 +61,17 @@ def after_ckan_json_to_group(group, state = None):
     if group.get('extras'):
         extras = []
         for extra in group['extras']:
-            extra = extra.copy()
             value = extra.get('value')
             if value is None:
                 continue
             value = json.loads(value)
             if value in (None, ''):
                 continue
-            extra['value'] = value
-            extra.pop('__extras', None)
-            extras.append(extra)
+            # Add a new extra with only key and value.
+            extras.append(dict(
+                key = extra['key'],
+                value = value,
+                ))
         group['extras'] = extras or None
 
     if group.get('groups'):
@@ -111,7 +112,6 @@ def after_ckan_json_to_package(package, state = None):
                     'dct:publisher',  # Ignore source ID of publisher.
                     ):
                 continue
-            extra = extra.copy()
             new_key, value_converter = {
                 'dataQuality': (u"Qualité des données", conv.cleanup_line),
                 'dc:source': (u"Source", conv.cleanup_line),
@@ -168,7 +168,7 @@ def after_ckan_json_to_package(package, state = None):
                 'dcterms:references': (u"Références", conv.cleanup_line),
                 }.get(key, (None, conv.cleanup_line))
             if new_key not in (None, key):
-                extra['key'] = new_key
+                key = new_key
             value = extra.get('value')
             if value is not None:
                 value = json.loads(value)
@@ -177,9 +177,11 @@ def after_ckan_json_to_package(package, state = None):
                 log.warning(u"{}: {}. Error: {}".format(key, value, error))
             if value is None:
                 continue
-            extra['value'] = value
-            extra.pop('__extras', None)
-            extras.append(extra)
+            # Add a new extra with only key and value.
+            extras.append(dict(
+                key = extra['key'],
+                value = value,
+                ))
         package['extras'] = extras or None
 
     if package.get('groups'):
