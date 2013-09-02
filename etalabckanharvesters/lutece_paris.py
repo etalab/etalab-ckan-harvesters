@@ -135,7 +135,7 @@ def before_ckan_json_to_package(package, state = None):
     if resources:
         package['resources'] = resources = resources[:]
 
-        for resource_index , resource in enumerate(resources):
+        for resource_index, resource in enumerate(resources):
             resources[resource_index] = resource = resource.copy()
 
             for key in ('created',):
