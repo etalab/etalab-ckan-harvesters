@@ -150,6 +150,7 @@ def after_ckan_json_to_package(package, state = None):
                         u'irrégulier': u"au fil de l'eau",
                         u'irrégulière': u"au fil de l'eau",
                         u'Irrégulière': u"au fil de l'eau",
+                        u'Tous les 5 ans': u"quinquénale",
                         }),
                     conv.test_in([
                         u"annuelle",
@@ -158,6 +159,7 @@ def after_ckan_json_to_package(package, state = None):
                         u"bimestrielle",
                         u"hebdomadaire",
                         u"journalier",
+                        u"quinquénale"
                         u"mensuelle",
                         u"quotidienne",
                         u"semestrielle",
