@@ -212,6 +212,7 @@ def main():
         conv.make_ckan_json_to_organization(drop_none_values = True),
         conv.not_none,
         ))(response_dict['result'], state = conv.default_state)
+
     supplier_package_title = u'Jeux de données - {}'.format(supplier['title'])
     supplier_package_name = strings.slugify(supplier_package_title)[:100]
 
