@@ -423,7 +423,7 @@ def main():
         organization = conv.check(group_to_organization_ckan_json)(group, state = conv.default_state)
         helpers.set_extra(organization, 'harvest_app_name', app_name)
         log.info(u'Upserting organization: {}'.format(organization['title']))
-        organization = upsert_organization(target_site_url, organization)
+        organization = helpers.upsert_organization(target_site_url, organization, headers = ckan_headers)
         organization_by_name[organization['name']] = organization
         organization_by_source_name[group_name] = organization
 
@@ -678,85 +678,6 @@ Les jeux de données fournis par {} pour data.gouv.fr.
 #        pprint.pprint(deleted_package)
 
     return 0
-
-
-def upsert_organization(target_site_url, organization):
-    organization['name'] = name = strings.slugify(organization['title'])[:100]
-
-    request = urllib2.Request(urlparse.urljoin(target_site_url,
-        'api/3/action/organization_show?id={}'.format(name)), headers = ckan_headers)
-    try:
-        response = urllib2.urlopen(request)
-    except urllib2.HTTPError as response:
-        if response.code != 404:
-            raise
-        existing_organization = {}
-    else:
-        response_text = response.read()
-        try:
-            response_dict = json.loads(response_text)
-        except ValueError:
-            log.error(u'An exception occured while reading organization: {0}'.format(organization))
-            log.error(response_text)
-            raise
-        existing_organization = conv.check(conv.pipe(
-            conv.make_ckan_json_to_organization(drop_none_values = True),
-            conv.not_none,
-            ))(response_dict['result'], state = conv.default_state)
-    organization['packages'] = existing_organization.get('packages') or []
-    if existing_organization.get('id') is None:
-        # Create organization.
-        request = urllib2.Request(urlparse.urljoin(target_site_url, 'api/3/action/organization_create'),
-            headers = ckan_headers)
-        try:
-            response = urllib2.urlopen(request, urllib.quote(json.dumps(organization)))
-        except urllib2.HTTPError as response:
-            response_text = response.read()
-            try:
-                response_dict = json.loads(response_text)
-            except ValueError:
-                log.error(u'An exception occured while creating organization: {0}'.format(organization))
-                log.error(response_text)
-                raise
-            log.error(u'An exception occured while creating organization: {0}'.format(organization))
-            for key, value in response_dict.iteritems():
-                log.debug('{} = {}'.format(key, value))
-            raise
-        else:
-            assert response.code == 200
-            response_dict = json.loads(response.read())
-            assert response_dict['success'] is True
-            created_organization = response_dict['result']
-#            pprint.pprint(created_organization)
-            organization['id'] = created_organization['id']
-    else:
-        # Update organization.
-        organization['id'] = existing_organization['id']
-        organization['state'] = 'active'
-
-        request = urllib2.Request(urlparse.urljoin(target_site_url,
-            'api/3/action/organization_update?id={}'.format(name)), headers = ckan_headers)
-        try:
-            response = urllib2.urlopen(request, urllib.quote(json.dumps(organization)))
-        except urllib2.HTTPError as response:
-            response_text = response.read()
-            try:
-                response_dict = json.loads(response_text)
-            except ValueError:
-                log.error(u'An exception occured while updating organization: {0}'.format(organization))
-                log.error(response_text)
-                raise
-            log.error(u'An exception occured while updating organization: {0}'.format(organization))
-            for key, value in response_dict.iteritems():
-                log.debug('{} = {}'.format(key, value))
-            raise
-        else:
-            assert response.code == 200
-            response_dict = json.loads(response.read())
-            assert response_dict['success'] is True
-#            updated_organization = response_dict['result']
-#            pprint.pprint(updated_organization)
-    return organization
 
 
 def upsert_package(target_site_url, package):

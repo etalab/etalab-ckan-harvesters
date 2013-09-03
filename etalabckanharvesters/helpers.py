@@ -27,6 +27,19 @@
 """Helpers for harvesters"""
 
 
+import json
+import logging
+import urllib
+import urllib2
+import urlparse
+
+from biryani1 import baseconv, custom_conv, states, strings
+from ckantoolbox import ckanconv
+
+conv = custom_conv(baseconv, ckanconv, states)
+log = logging.getLogger(__name__)
+
+
 def get_extra(instance, key, default = UnboundLocalError):
     for extra in (instance.get('extras') or []):
         if extra['key'] == key:
@@ -57,3 +70,88 @@ def set_extra(instance, key, value):
         key = key,
         value = value,
         ))
+
+
+def upsert_organization(target_site_url, organization, headers = None):
+    assert headers is not None
+
+    organization['name'] = name = strings.slugify(organization['title'])[:100]
+    if organization.get('name') is None:
+        organization['name'] = name
+    else:
+        assert organization['name'] == name, organization
+
+    request = urllib2.Request(urlparse.urljoin(target_site_url,
+        'api/3/action/organization_show?id={}'.format(name)), headers = headers)
+    try:
+        response = urllib2.urlopen(request)
+    except urllib2.HTTPError as response:
+        if response.code != 404:
+            raise
+        existing_organization = {}
+    else:
+        response_text = response.read()
+        try:
+            response_dict = json.loads(response_text)
+        except ValueError:
+            log.error(u'An exception occured while reading organization: {0}'.format(organization))
+            log.error(response_text)
+            raise
+        existing_organization = conv.check(conv.pipe(
+            conv.make_ckan_json_to_organization(drop_none_values = True),
+            conv.not_none,
+            ))(response_dict['result'], state = conv.default_state)
+    organization['packages'] = existing_organization.get('packages') or []
+    if existing_organization.get('id') is None:
+        # Create organization.
+        request = urllib2.Request(urlparse.urljoin(target_site_url, 'api/3/action/organization_create'),
+            headers = headers)
+        try:
+            response = urllib2.urlopen(request, urllib.quote(json.dumps(organization)))
+        except urllib2.HTTPError as response:
+            response_text = response.read()
+            try:
+                response_dict = json.loads(response_text)
+            except ValueError:
+                log.error(u'An exception occured while creating organization: {0}'.format(organization))
+                log.error(response_text)
+                raise
+            log.error(u'An exception occured while creating organization: {0}'.format(organization))
+            for key, value in response_dict.iteritems():
+                log.debug('{} = {}'.format(key, value))
+            raise
+        else:
+            assert response.code == 200
+            response_dict = json.loads(response.read())
+            assert response_dict['success'] is True
+            created_organization = response_dict['result']
+#            pprint.pprint(created_organization)
+            organization['id'] = created_organization['id']
+    else:
+        # Update organization.
+        organization['id'] = existing_organization['id']
+        organization['state'] = 'active'
+
+        request = urllib2.Request(urlparse.urljoin(target_site_url,
+            'api/3/action/organization_update?id={}'.format(name)), headers = headers)
+        try:
+            response = urllib2.urlopen(request, urllib.quote(json.dumps(organization)))
+        except urllib2.HTTPError as response:
+            response_text = response.read()
+            try:
+                response_dict = json.loads(response_text)
+            except ValueError:
+                log.error(u'An exception occured while updating organization: {0}'.format(organization))
+                log.error(response_text)
+                raise
+            log.error(u'An exception occured while updating organization: {0}'.format(organization))
+            for key, value in response_dict.iteritems():
+                log.debug('{} = {}'.format(key, value))
+            raise
+        else:
+            assert response.code == 200
+            response_dict = json.loads(response.read())
+            assert response_dict['success'] is True
+#            updated_organization = response_dict['result']
+#            pprint.pprint(updated_organization)
+    return organization
