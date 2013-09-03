@@ -212,10 +212,39 @@ def main():
         conv.make_ckan_json_to_organization(drop_none_values = True),
         conv.not_none,
         ))(response_dict['result'], state = conv.default_state)
-    existing_packages_name = set(
-        package['name']
-        for package in (supplier.get('packages') or [])
-        )
+    supplier_package_title = u'Jeux de données - {}'.format(supplier['title'])
+    supplier_package_name = strings.slugify(supplier_package_title)[:100]
+
+    existing_packages_name = set()
+    if supplier_package_name in (
+            package['name']
+            for package in (supplier.get('packages') or [])
+            ):
+        request = urllib2.Request(urlparse.urljoin(target_site_url,
+            'api/3/action/package_show?id={}'.format(supplier_package_name)), headers = ckan_headers)
+        response = urllib2.urlopen(request)
+        response_dict = json.loads(response.read())
+        supplier_package = conv.check(
+            conv.make_ckan_json_to_package(drop_none_values = True),
+            conv.not_none,
+            )(response_dict['result'], state = conv.default_state)
+        for tag in (supplier_package.get('tags') or []):
+            if tag['name'] == 'liste-de-jeux-de-donnees':
+                existing_packages_name.add(supplier_package['name'])
+                for resource in (supplier_package.get('resources') or []):
+                    response = urllib2.urlopen(resource['url'])
+                    packages_csv_reader = csv.reader(response, delimiter = ';', quotechar = '"')
+                    packages_csv_reader.next()
+                    for row in packages_csv_reader:
+                        package_infos = dict(
+                            (key, value.decode('utf-8'))
+                            for key, value in zip(['title', 'name', 'source_name'], row)
+                            )
+                        existing_packages_name.add(package_infos['name'])
+                break
+        else:
+            # This dataset doesn't contain a list of datasets. Ignore it.
+            pass
 
     # Retrieve names of packages in source.
     request = urllib2.Request(urlparse.urljoin(source_site_url, 'api/v3/action/package_list'),
@@ -226,7 +255,6 @@ def main():
         conv.ckan_json_to_name_list,
         conv.not_none,
         ))(response_dict['result'], state = conv.default_state)
-    print packages_source_name
 
     # Retrieve packages from source.
     package_by_name = {}
@@ -263,7 +291,6 @@ def main():
         package['name'] = package_name
         package_by_name[package_name] = package
         log.info(u'Harvested package: {}'.format(package['title']))
-    print package_by_name
 
     # Upsert source packages to target.
     for package_name, package in package_by_name.iteritems():
@@ -352,8 +379,6 @@ def main():
             ))(response_dict['result'], state = conv.default_state)
         package_by_name[package_name] = package
 
-    supplier_package_title = u'Jeux de données - {}'.format(supplier['title'])
-    supplier_package_name = strings.slugify(supplier_package_title)[:100]
     log.info(u'Upserting package: {}'.format(supplier_package_name))
     supplier_packages_file = cStringIO.StringIO()
     supplier_packages_csv_writer = csv.writer(supplier_packages_file, delimiter = ';', quotechar = '"',
