@@ -168,6 +168,8 @@ def main():
             try:
                 data_str = data_file.read()
                 data_html = etree.fromstring(data_str, html_parser)
+                html_base_list = data_html.xpath('head/base[@href]')
+                base_url = html_base_list[0].get('href')
 
                 dataset_html = data_html.xpath('.//div[@class="tx_icsopendatastore_pi1_single"]')[0]
                 assert dataset_html is not None
@@ -237,7 +239,7 @@ def main():
                 resources = [
                     dict(
                         format = resource_html.xpath('.//span[@class="coin"]')[0].text.strip() or None,
-                        url = resource_html.xpath('.//a[@href]')[0].get('href'),
+                        url = urlparse.urljoin(base_url, resource_html.xpath('.//a[@href]')[0].get('href')),
                         )
                     for resource_html in dataset_html.xpath('.//div[@class="tx_icsopendatastore_pi1_file"]')
                     ]
