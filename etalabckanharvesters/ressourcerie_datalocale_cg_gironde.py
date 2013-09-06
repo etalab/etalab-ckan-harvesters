@@ -48,7 +48,6 @@ from ckantoolbox import ckanconv, filestores
 from . import helpers
 
 app_name = os.path.splitext(os.path.basename(__file__))[0]
-ckan_headers = None
 conv = custom_conv(baseconv, ckanconv, states)
 log = logging.getLogger(app_name)
 
@@ -331,23 +330,25 @@ def main():
         conv.not_none,
         ))(dict(config_parser.items('Etalab-CKAN-Harvesters')), conv.default_state)
 
-    global ckan_headers
-    ckan_headers = {
-        'Authorization': conf['ckan.api_key'],
-        'User-Agent': conf['user_agent'],
-        }
     excluded_organizations_name = set([
         u'atos',
         u'open-street-map',
         ])
     organization_by_name = {}
-    supplier_name = u'ressourcerie-datalocale'
+    source_headers = {
+        'User-Agent': conf['user_agent'],
+        }
     source_site_url = u'http://catalogue.datalocale.fr/'
+    supplier_name = u'ressourcerie-datalocale'
+    target_headers = {
+        'Authorization': conf['ckan.api_key'],
+        'User-Agent': conf['user_agent'],
+        }
     target_site_url = conf['ckan.site_url']
 
     # Retrieve target organization (that will contain all harvested datasets).
     request = urllib2.Request(urlparse.urljoin(target_site_url,
-        'api/3/action/organization_show?id={}'.format(supplier_name)), headers = ckan_headers)
+        'api/3/action/organization_show?id={}'.format(supplier_name)), headers = target_headers)
     response = urllib2.urlopen(request)
     response_dict = json.loads(response.read())
     supplier = conv.check(conv.pipe(
@@ -358,8 +359,10 @@ def main():
 
     existing_packages_name = set()
     for organization_package in (supplier.get('packages') or []):
+        if not organization_package['name'].startswith('jeux-de-donnees-'):
+            continue
         request = urllib2.Request(urlparse.urljoin(target_site_url,
-            'api/3/action/package_show?id={}'.format(organization_package['name'])), headers = ckan_headers)
+            'api/3/action/package_show?id={}'.format(organization_package['name'])), headers = target_headers)
         response = urllib2.urlopen(request)
         response_dict = json.loads(response.read())
         organization_package = conv.check(
@@ -387,7 +390,7 @@ def main():
 
     # Retrieve names of groups in source.
     request = urllib2.Request(urlparse.urljoin(source_site_url, 'api/3/action/group_list'),
-        headers = ckan_headers)
+        headers = source_headers)
     response = urllib2.urlopen(request, '{}')  # CKAN 1.7 requires a POST.
     response_dict = json.loads(response.read())
     groups_name = conv.check(conv.pipe(
@@ -399,7 +402,7 @@ def main():
     group_by_name = {}
     for group_name in groups_name:
         request = urllib2.Request(urlparse.urljoin(source_site_url, 'api/3/action/group_show'),
-            headers = ckan_headers)
+            headers = source_headers)
         response = urllib2.urlopen(request, urllib.quote(json.dumps(dict(
             id = group_name,
             ))))  # CKAN 1.7 requires a POST.
@@ -423,13 +426,13 @@ def main():
         organization = conv.check(group_to_organization_ckan_json)(group, state = conv.default_state)
         helpers.set_extra(organization, 'harvest_app_name', app_name)
         log.info(u'Upserting organization: {}'.format(organization['title']))
-        organization = helpers.upsert_organization(target_site_url, organization, headers = ckan_headers)
+        organization = helpers.upsert_organization(target_site_url, organization, headers = target_headers)
         organization_by_name[organization['name']] = organization
         organization_by_source_name[group_name] = organization
 
     # Retrieve names of packages in source.
     request = urllib2.Request(urlparse.urljoin(source_site_url, 'api/3/action/package_list'),
-        headers = ckan_headers)
+        headers = source_headers)
     response = urllib2.urlopen(request, '{}')  # CKAN 1.7 requires a POST.
     response_dict = json.loads(response.read())
     packages_source_name = conv.check(conv.pipe(
@@ -443,7 +446,7 @@ def main():
     package_source_name_by_name = {}
     for package_source_name in packages_source_name:
         request = urllib2.Request(urlparse.urljoin(source_site_url, 'api/3/action/package_show'),
-            headers = ckan_headers)
+            headers = source_headers)
         response = urllib2.urlopen(request, urllib.quote(json.dumps(dict(
                 id = package_source_name,
                 ))))  # CKAN 1.7 requires a POST.
@@ -494,7 +497,7 @@ def main():
             log.info(u'Updating package: {}'.format(package['title']))
             existing_packages_name.remove(package_name)
             request = urllib2.Request(urlparse.urljoin(target_site_url,
-                'api/3/action/package_update?id={}'.format(package_name)), headers = ckan_headers)
+                'api/3/action/package_update?id={}'.format(package_name)), headers = target_headers)
             try:
                 response = urllib2.urlopen(request, urllib.quote(json.dumps(package)))
             except urllib2.HTTPError as response:
@@ -517,7 +520,7 @@ def main():
         else:
             log.info(u'Creating package: {}'.format(package['title']))
             request = urllib2.Request(urlparse.urljoin(target_site_url, 'api/3/action/package_create'),
-                headers = ckan_headers)
+                headers = target_headers)
             try:
                 response = urllib2.urlopen(request, urllib.quote(json.dumps(package)))
             except urllib2.HTTPError as response:
@@ -533,7 +536,7 @@ def main():
                     # A package with the same name already exists. Maybe it is deleted. Undelete it.
                     package['state'] = 'active'
                     request = urllib2.Request(urlparse.urljoin(target_site_url,
-                        'api/3/action/package_update?id={}'.format(package_name)), headers = ckan_headers)
+                        'api/3/action/package_update?id={}'.format(package_name)), headers = target_headers)
                     try:
                         response = urllib2.urlopen(request, urllib.quote(json.dumps(package)))
                     except urllib2.HTTPError as response:
@@ -566,7 +569,7 @@ def main():
 
         # Read updated package.
         request = urllib2.Request(urlparse.urljoin(target_site_url,
-            'api/3/action/package_show?id={}'.format(package_name)), headers = ckan_headers)
+            'api/3/action/package_show?id={}'.format(package_name)), headers = target_headers)
         response = urllib2.urlopen(request)
         response_dict = json.loads(response.read())
         package = conv.check(conv.pipe(
@@ -597,7 +600,7 @@ def main():
                     package_source_name_by_name[organization_package['name']].encode('utf-8'),
                     ])
             file_metadata = filestores.upload_file(target_site_url, organization_package_name,
-                organization_packages_file.getvalue(), ckan_headers)
+                organization_packages_file.getvalue(), target_headers)
 
             organization_package = dict(
                 author = supplier['title'],
@@ -640,21 +643,21 @@ Les jeux de données fournis par {} pour data.gouv.fr.
                     ],
                 title = organization_package_title,
                 )
-            upsert_package(target_site_url, organization_package)
+            helpers.upsert_package(target_site_url, organization_package, headers = target_headers)
         else:
             # Delete dataset if it exists.
             log.info(u'Deleting package: {}'.format(organization_package_name))
 
             # Retrieve package id (needed for delete).
-            request = urllib2.Request(urlparse.urljoin(conf['ckan.site_url'],
-                'api/3/action/package_show?id={}'.format(organization_package_name)), headers = ckan_headers)
+            request = urllib2.Request(urlparse.urljoin(target_site_url,
+                'api/3/action/package_show?id={}'.format(organization_package_name)), headers = target_headers)
             response = urllib2.urlopen(request)
             response_dict = json.loads(response.read())
             existing_package = response_dict['result']
 
             # TODO: To replace with package_purge when it is available.
-            request = urllib2.Request(urlparse.urljoin(conf['ckan.site_url'],
-                'api/3/action/package_delete?id={}'.format(organization_package_name)), headers = ckan_headers)
+            request = urllib2.Request(urlparse.urljoin(target_site_url,
+                'api/3/action/package_delete?id={}'.format(organization_package_name)), headers = target_headers)
             response = urllib2.urlopen(request, urllib.quote(json.dumps(existing_package)))
             response_dict = json.loads(response.read())
 #            deleted_package = response_dict['result']
@@ -665,97 +668,19 @@ Les jeux de données fournis par {} pour data.gouv.fr.
         # Retrieve package id (needed for delete).
         log.info(u'Deleting package: {}'.format(package_name))
         request = urllib2.Request(urlparse.urljoin(target_site_url,
-            'api/3/action/package_show?id={}'.format(package_name)), headers = ckan_headers)
+            'api/3/action/package_show?id={}'.format(package_name)), headers = target_headers)
         response = urllib2.urlopen(request)
         response_dict = json.loads(response.read())
         existing_package = response_dict['result']
 
         request = urllib2.Request(urlparse.urljoin(target_site_url,
-            'api/3/action/package_delete?id={}'.format(package_name)), headers = ckan_headers)
+            'api/3/action/package_delete?id={}'.format(package_name)), headers = target_headers)
         response = urllib2.urlopen(request, urllib.quote(json.dumps(existing_package)))
         response_dict = json.loads(response.read())
 #        deleted_package = response_dict['result']
 #        pprint.pprint(deleted_package)
 
     return 0
-
-
-def upsert_package(target_site_url, package):
-    package['name'] = name = strings.slugify(package['title'])[:100]
-
-    request = urllib2.Request(urlparse.urljoin(target_site_url,
-        'api/3/action/package_show?id={}'.format(name)), headers = ckan_headers)
-    try:
-        response = urllib2.urlopen(request)
-    except urllib2.HTTPError as response:
-        if response.code != 404:
-            raise
-        existing_package = {}
-    else:
-        response_text = response.read()
-        try:
-            response_dict = json.loads(response_text)
-        except ValueError:
-            log.error(u'An exception occured while reading package: {0}'.format(package))
-            log.error(response_text)
-            raise
-        existing_package = conv.check(conv.pipe(
-            conv.make_ckan_json_to_package(drop_none_values = True),
-            conv.not_none,
-            ))(response_dict['result'], state = conv.default_state)
-    if existing_package.get('id') is None:
-        # Create package.
-        request = urllib2.Request(urlparse.urljoin(target_site_url, 'api/3/action/package_create'),
-            headers = ckan_headers)
-        try:
-            response = urllib2.urlopen(request, urllib.quote(json.dumps(package)))
-        except urllib2.HTTPError as response:
-            response_text = response.read()
-            try:
-                response_dict = json.loads(response_text)
-            except ValueError:
-                log.error(u'An exception occured while creating package: {0}'.format(package))
-                log.error(response_text)
-                raise
-            log.error(u'An exception occured while creating package: {0}'.format(package))
-            for key, value in response_dict.iteritems():
-                log.debug('{} = {}'.format(key, value))
-            raise
-        else:
-            assert response.code == 200
-            response_dict = json.loads(response.read())
-            assert response_dict['success'] is True
-            created_package = response_dict['result']
-#            pprint.pprint(created_package)
-            package['id'] = created_package['id']
-    else:
-        # Update package.
-        package['id'] = existing_package['id']
-        package['state'] = 'active'
-
-        request = urllib2.Request(urlparse.urljoin(target_site_url,
-            'api/3/action/package_update?id={}'.format(name)), headers = ckan_headers)
-        try:
-            response = urllib2.urlopen(request, urllib.quote(json.dumps(package)))
-        except urllib2.HTTPError as response:
-            response_text = response.read()
-            try:
-                response_dict = json.loads(response_text)
-            except ValueError:
-                log.error(u'An exception occured while updating package: {0}'.format(package))
-                log.error(response_text)
-                raise
-            log.error(u'An exception occured while updating package: {0}'.format(package))
-            for key, value in response_dict.iteritems():
-                log.debug('{} = {}'.format(key, value))
-            raise
-        else:
-            assert response.code == 200
-            response_dict = json.loads(response.read())
-            assert response_dict['success'] is True
-#            updated_package = response_dict['result']
-#            pprint.pprint(updated_package)
-    return package
 
 
 if __name__ == '__main__':

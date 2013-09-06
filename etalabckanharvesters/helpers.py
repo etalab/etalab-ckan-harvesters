@@ -72,7 +72,7 @@ def set_extra(instance, key, value):
         ))
 
 
-def upsert_organization(target_site_url, organization, headers = None):
+def upsert_organization(site_url, organization, headers = None):
     assert headers is not None
 
     organization['name'] = name = strings.slugify(organization['title'])[:100]
@@ -81,7 +81,7 @@ def upsert_organization(target_site_url, organization, headers = None):
     else:
         assert organization['name'] == name, organization
 
-    request = urllib2.Request(urlparse.urljoin(target_site_url,
+    request = urllib2.Request(urlparse.urljoin(site_url,
         'api/3/action/organization_show?id={}'.format(name)), headers = headers)
     try:
         response = urllib2.urlopen(request)
@@ -104,19 +104,18 @@ def upsert_organization(target_site_url, organization, headers = None):
     organization['packages'] = existing_organization.get('packages') or []
     if existing_organization.get('id') is None:
         # Create organization.
-        request = urllib2.Request(urlparse.urljoin(target_site_url, 'api/3/action/organization_create'),
+        request = urllib2.Request(urlparse.urljoin(site_url, 'api/3/action/organization_create'),
             headers = headers)
         try:
             response = urllib2.urlopen(request, urllib.quote(json.dumps(organization)))
         except urllib2.HTTPError as response:
             response_text = response.read()
+            log.error(u'An exception occured while creating organization: {0}'.format(organization))
             try:
                 response_dict = json.loads(response_text)
             except ValueError:
-                log.error(u'An exception occured while creating organization: {0}'.format(organization))
                 log.error(response_text)
                 raise
-            log.error(u'An exception occured while creating organization: {0}'.format(organization))
             for key, value in response_dict.iteritems():
                 log.debug('{} = {}'.format(key, value))
             raise
@@ -132,19 +131,18 @@ def upsert_organization(target_site_url, organization, headers = None):
         organization['id'] = existing_organization['id']
         organization['state'] = 'active'
 
-        request = urllib2.Request(urlparse.urljoin(target_site_url,
-            'api/3/action/organization_update?id={}'.format(name)), headers = headers)
+        request = urllib2.Request(urlparse.urljoin(site_url, 'api/3/action/organization_update?id={}'.format(name)),
+            headers = headers)
         try:
             response = urllib2.urlopen(request, urllib.quote(json.dumps(organization)))
         except urllib2.HTTPError as response:
             response_text = response.read()
+            log.error(u'An exception occured while updating organization: {0}'.format(organization))
             try:
                 response_dict = json.loads(response_text)
             except ValueError:
-                log.error(u'An exception occured while updating organization: {0}'.format(organization))
                 log.error(response_text)
                 raise
-            log.error(u'An exception occured while updating organization: {0}'.format(organization))
             for key, value in response_dict.iteritems():
                 log.debug('{} = {}'.format(key, value))
             raise
@@ -155,3 +153,80 @@ def upsert_organization(target_site_url, organization, headers = None):
 #            updated_organization = response_dict['result']
 #            pprint.pprint(updated_organization)
     return organization
+
+
+def upsert_package(site_url, package, headers = None):
+    assert headers is not None
+    package['name'] = name = strings.slugify(package['title'])[:100]
+
+    request = urllib2.Request(urlparse.urljoin(site_url, 'api/3/action/package_show?id={}'.format(name)),
+        headers = headers)
+    try:
+        response = urllib2.urlopen(request)
+    except urllib2.HTTPError as response:
+        if response.code != 404:
+            raise
+        existing_package = {}
+    else:
+        response_text = response.read()
+        try:
+            response_dict = json.loads(response_text)
+        except ValueError:
+            log.error(u'An exception occured while reading package: {0}'.format(package))
+            log.error(response_text)
+            raise
+        existing_package = conv.check(conv.pipe(
+            conv.make_ckan_json_to_package(drop_none_values = True),
+            conv.not_none,
+            ))(response_dict['result'], state = conv.default_state)
+    if existing_package.get('id') is None:
+        # Create package.
+        request = urllib2.Request(urlparse.urljoin(site_url, 'api/3/action/package_create'),
+            headers = headers)
+        try:
+            response = urllib2.urlopen(request, urllib.quote(json.dumps(package)))
+        except urllib2.HTTPError as response:
+            response_text = response.read()
+            log.error(u'An exception occured while creating package: {0}'.format(package))
+            try:
+                response_dict = json.loads(response_text)
+            except ValueError:
+                log.error(response_text)
+                raise
+            for key, value in response_dict.iteritems():
+                log.debug('{} = {}'.format(key, value))
+            raise
+        else:
+            assert response.code == 200
+            response_dict = json.loads(response.read())
+            assert response_dict['success'] is True
+            created_package = response_dict['result']
+#            pprint.pprint(created_package)
+            package['id'] = created_package['id']
+    else:
+        # Update package.
+        package['id'] = existing_package['id']
+        package['state'] = 'active'
+
+        request = urllib2.Request(urlparse.urljoin(site_url,
+            'api/3/action/package_update?id={}'.format(name)), headers = headers)
+        try:
+            response = urllib2.urlopen(request, urllib.quote(json.dumps(package)))
+        except urllib2.HTTPError as response:
+            response_text = response.read()
+            log.error(u'An exception occured while updating package: {0}'.format(package))
+            try:
+                response_dict = json.loads(response_text)
+            except ValueError:
+                log.error(response_text)
+                raise
+            for key, value in response_dict.iteritems():
+                log.debug('{} = {}'.format(key, value))
+            raise
+        else:
+            assert response.code == 200
+            response_dict = json.loads(response.read())
+            assert response_dict['success'] is True
+#            updated_package = response_dict['result']
+#            pprint.pprint(updated_package)
+    return package
