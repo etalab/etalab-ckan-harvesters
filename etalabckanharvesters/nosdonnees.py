@@ -32,8 +32,6 @@ http://www.nosdonnees.fr/
 
 import argparse
 import ConfigParser
-import cStringIO
-import csv
 import json
 import logging
 import os
@@ -42,8 +40,8 @@ import urllib
 import urllib2
 import urlparse
 
-from biryani1 import baseconv, custom_conv, states, strings
-from ckantoolbox import ckanconv, filestores
+from biryani1 import baseconv, custom_conv, states
+from ckantoolbox import ckanconv
 
 from . import helpers
 
@@ -128,30 +126,22 @@ def main():
         conv.not_none,
         ))(dict(config_parser.items('Etalab-CKAN-Harvesters')), conv.default_state)
 
+    harvester = helpers.Harvester(
+        old_supplier_title = u'Regards Citoyens',
+        supplier_abbreviation = u'nd',
+        supplier_title = u'NosDonnées.fr',
+        target_headers = {
+            'Authorization': conf['ckan.api_key'],
+            'User-Agent': conf['user_agent'],
+            },
+        target_site_url = conf['ckan.site_url'],
+        )
     source_headers = {
         'User-Agent': conf['user_agent'],
         }
     source_site_url = u'http://www.nosdonnees.fr/'
-    supplier_name = u'regards-citoyens'
-    target_headers = {
-        'Authorization': conf['ckan.api_key'],
-        'User-Agent': conf['user_agent'],
-        }
-    target_site_url = conf['ckan.site_url']
 
-    # Retrieve target organization (that will contain all harvested datasets).
-    request = urllib2.Request(urlparse.urljoin(target_site_url,
-        'api/3/action/organization_show?id={}'.format(supplier_name)), headers = target_headers)
-    response = urllib2.urlopen(request)
-    response_dict = json.loads(response.read())
-    supplier = conv.check(conv.pipe(
-        conv.make_ckan_json_to_organization(drop_none_values = True),
-        conv.not_none,
-        ))(response_dict['result'], state = conv.default_state)
-    existing_packages_name = set(
-        package['name']
-        for package in (supplier.get('packages') or [])
-        )
+    harvester.retrieve_target()
 
     # Retrieve names of packages in source.
     request = urllib2.Request(urlparse.urljoin(source_site_url, 'api/3/action/package_list'),
@@ -164,8 +154,6 @@ def main():
         ))(response_dict['result'], state = conv.default_state)
 
     # Retrieve packages from source.
-    package_by_name = {}
-    package_source_name_by_name = {}
     for package_source_name in packages_source_name:
         request = urllib2.Request(urlparse.urljoin(source_site_url, 'api/3/action/package_show'),
             headers = source_headers)
@@ -180,9 +168,6 @@ def main():
             ))(response_dict['result'], state = conv.default_state)
         if package is None:
             continue
-        if package is None:
-            continue
-        package['owner_org'] = supplier['id']
         package_groups = package.pop('groups', None)
         tags = [
             dict(
@@ -192,181 +177,16 @@ def main():
             ]
         if tags:
             package.setdefault('tags', []).extend(tags)
-        helpers.set_extra(package, 'harvest_app_name', app_name)
-        helpers.set_extra(package, 'supplier_id', supplier['id'])
-        package_name = strings.slugify(package['title'])[:100]
-        package_source_name_by_name[package_name] = package['name']
-        package['name'] = package_name
-        package_by_name[package_name] = package
+        source_name = package.pop('name')
+
+        source_url = urlparse.urljoin(source_site_url, 'dataset/{}'.format(source_name))
+        helpers.set_extra(package, u'Source', source_url)
+
+        package = conv.check(conv.ckan_input_package_to_output_package)(package, state = conv.default_state)
         log.info(u'Harvested package: {}'.format(package['title']))
+        harvester.add_package(package, harvester.supplier, source_name, source_url)
 
-    # Upsert source packages to target.
-    for package_name, package in package_by_name.iteritems():
-        if package_name in existing_packages_name:
-            log.info(u'Updating package: {}'.format(package['title']))
-            existing_packages_name.remove(package_name)
-            request = urllib2.Request(urlparse.urljoin(target_site_url,
-                'api/3/action/package_update?id={}'.format(package_name)), headers = target_headers)
-            try:
-                response = urllib2.urlopen(request, urllib.quote(json.dumps(package)))
-            except urllib2.HTTPError as response:
-                response_text = response.read()
-                try:
-                    response_dict = json.loads(response_text)
-                except ValueError:
-                    log.error(u'An exception occured while updating package: {}'.format(package))
-                    log.error(response_text)
-                    continue
-                log.error(u'An error occured while updating package: {}'.format(package))
-                for key, value in response_dict.iteritems():
-                    print '{} = {}'.format(key, value)
-            else:
-                assert response.code == 200
-                response_dict = json.loads(response.read())
-                assert response_dict['success'] is True
-#                updated_package = response_dict['result']
-#                pprint.pprint(updated_package)
-        else:
-            log.info(u'Creating package: {}'.format(package['title']))
-            request = urllib2.Request(urlparse.urljoin(target_site_url, 'api/3/action/package_create'),
-                headers = target_headers)
-            try:
-                response = urllib2.urlopen(request, urllib.quote(json.dumps(package)))
-            except urllib2.HTTPError as response:
-                response_text = response.read()
-                try:
-                    response_dict = json.loads(response_text)
-                except ValueError:
-                    log.error(u'An exception occured while creating package: {}'.format(package))
-                    log.error(response_text)
-                    continue
-                error = response_dict.get('error', {})
-                if error.get('__type') == u'Validation Error' and error.get('name'):
-                    # A package with the same name already exists. Maybe it is deleted. Undelete it.
-                    package['state'] = 'active'
-                    request = urllib2.Request(urlparse.urljoin(target_site_url,
-                        'api/3/action/package_update?id={}'.format(package_name)), headers = target_headers)
-                    try:
-                        response = urllib2.urlopen(request, urllib.quote(json.dumps(package)))
-                    except urllib2.HTTPError as response:
-                        response_text = response.read()
-                        try:
-                            response_dict = json.loads(response_text)
-                        except ValueError:
-                            log.error(u'An exception occured while undeleting package: {}'.format(package))
-                            log.error(response_text)
-                            continue
-                        log.error(u'An error occured while undeleting package: {}'.format(package))
-                        for key, value in response_dict.iteritems():
-                            print '{} = {}'.format(key, value)
-                    else:
-                        assert response.code == 200
-                        response_dict = json.loads(response.read())
-                        assert response_dict['success'] is True
-#                        updated_package = response_dict['result']
-#                        pprint.pprint(updated_package)
-                else:
-                    log.error(u'An error occured while creating package: {}'.format(package))
-                    for key, value in response_dict.iteritems():
-                        print '{} = {}'.format(key, value)
-            else:
-                assert response.code == 200
-                response_dict = json.loads(response.read())
-                assert response_dict['success'] is True
-#                created_package = response_dict['result']
-#                pprint.pprint(created_package)
-
-        # Read updated package.
-        request = urllib2.Request(urlparse.urljoin(target_site_url,
-            'api/3/action/package_show?id={}'.format(package_name)), headers = target_headers)
-        response = urllib2.urlopen(request)
-        response_dict = json.loads(response.read())
-        package = conv.check(conv.pipe(
-            conv.make_ckan_json_to_package(drop_none_values = True),
-            conv.not_none,
-            ))(response_dict['result'], state = conv.default_state)
-        package_by_name[package_name] = package
-
-    supplier_package_title = u'Jeux de données - {}'.format(supplier['title'])
-    supplier_package_name = strings.slugify(supplier_package_title)[:100]
-    log.info(u'Upserting package: {}'.format(supplier_package_name))
-    supplier_packages_file = cStringIO.StringIO()
-    supplier_packages_csv_writer = csv.writer(supplier_packages_file, delimiter = ';', quotechar = '"',
-        quoting = csv.QUOTE_MINIMAL)
-    supplier_packages_csv_writer.writerow([
-        'Titre',
-        'Nom',
-        'Nom original',
-        ])
-    for package_name, package in sorted(package_by_name.iteritems()):
-        supplier_packages_csv_writer.writerow([
-            package['title'].encode('utf-8'),
-            package['name'].encode('utf-8'),
-            package_source_name_by_name[package['name']].encode('utf-8'),
-            ])
-    file_metadata = filestores.upload_file(target_site_url, supplier_package_name,
-        supplier_packages_file.getvalue(), target_headers)
-
-    supplier_package = dict(
-        author = supplier['title'],
-        extras = [
-            dict(
-                key = 'harvest_app_name',
-                value = app_name,
-                ),
-            ],
-        license_id = 'odbl',
-        name = supplier_package_name,
-        notes = u'''\
-Les jeux de données fournis par {} pour data.gouv.fr.
-'''.format(supplier['title']),
-        owner_org = supplier['id'],
-        resources = [
-            dict(
-                created = file_metadata['_creation_date'],
-                format = 'CSV',
-                hash = file_metadata['_checksum'],
-                last_modified = file_metadata['_last_modified'],
-                name = supplier_package_name + u'.txt',
-                size = file_metadata['_content_length'],
-                url = file_metadata['_location'],
-#                        revision_id – (optional)
-#                        description (string) – (optional)
-#                        resource_type (string) – (optional)
-#                        mimetype (string) – (optional)
-#                        mimetype_inner (string) – (optional)
-#                        webstore_url (string) – (optional)
-#                        cache_url (string) – (optional)
-#                        cache_last_updated (iso date string) – (optional)
-#                        webstore_last_updated (iso date string) – (optional)
-                ),
-            ],
-        tags = [
-            dict(
-                name = 'liste-de-jeux-de-donnees',
-                ),
-            ],
-        title = supplier_package_title,
-        )
-    existing_packages_name.discard(supplier_package_name)
-    helpers.upsert_package(target_site_url, supplier_package, headers = target_headers)
-
-    # Delete obsolete packages.
-    for package_name in existing_packages_name:
-        # Retrieve package id (needed for delete).
-        log.info(u'Deleting package: {}'.format(package_name))
-        request = urllib2.Request(urlparse.urljoin(target_site_url,
-            'api/3/action/package_show?id={}'.format(package_name)), headers = target_headers)
-        response = urllib2.urlopen(request)
-        response_dict = json.loads(response.read())
-        existing_package = response_dict['result']
-
-        request = urllib2.Request(urlparse.urljoin(target_site_url,
-            'api/3/action/package_delete?id={}'.format(package_name)), headers = target_headers)
-        response = urllib2.urlopen(request, urllib.quote(json.dumps(existing_package)))
-        response_dict = json.loads(response.read())
-#        deleted_package = response_dict['result']
-#        pprint.pprint(deleted_package)
+    harvester.update_target()
 
     return 0
 
