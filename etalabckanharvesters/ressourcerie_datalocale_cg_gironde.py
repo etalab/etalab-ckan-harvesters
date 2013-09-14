@@ -380,8 +380,6 @@ def main():
             )
         if group.get('description') is not None:
             organization['description'] = group['description']
-        if group.get('url') is not None:
-            organization['url'] = group['url']
         if group.get('image_url') is not None:
             organization['image_url'] = group['image_url']
         organization_by_source_name[group_name] = organization

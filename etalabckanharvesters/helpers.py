@@ -412,14 +412,23 @@ class Harvester(object):
             try:
                 response_dict = json.loads(response_text)
             except ValueError:
-                log.error(u'An exception occured while reading organization: {0}'.format(organization))
+                log.error(u'An exception occured while reading organization: {0}'.format(name))
                 log.error(response_text)
                 raise
             existing_organization = conv.check(conv.pipe(
                 conv.make_ckan_json_to_organization(drop_none_values = True),
                 conv.not_none,
                 ))(response_dict['result'], state = conv.default_state)
-        organization['packages'] = existing_organization.get('packages') or []
+
+            organization_infos = organization
+            organization = conv.check(conv.ckan_input_organization_to_output_organization)(existing_organization,
+                state = conv.default_state)
+            organization.update(
+                (key, value)
+                for key, value in organization_infos.iteritems()
+                if value is not None
+                )
+
         if existing_organization.get('id') is None:
             # Create organization.
             request = urllib2.Request(urlparse.urljoin(self.target_site_url, 'api/3/action/organization_create'),
