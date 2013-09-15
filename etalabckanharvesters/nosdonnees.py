@@ -168,6 +168,7 @@ def main():
             ))(response_dict['result'], state = conv.default_state)
         if package is None:
             continue
+
         package_groups = package.pop('groups', None)
         tags = [
             dict(
@@ -175,8 +176,17 @@ def main():
                 )
             for group in (package_groups or [])
             ]
+        for index, tag in enumerate(tags[:]):
+            tag_name = tag['name']
+            if tag_name == 'brocas':
+                del tags[index]
+                package['territorial_coverage'] = u'CommuneOfFrance/40056'
+            elif tag_name == 'strasbourg':
+                del tags[index]
+                package['territorial_coverage'] = u'IntercommunalityOfFrance/246700488'  # CU de Strasbourg
         if tags:
             package.setdefault('tags', []).extend(tags)
+
         source_name = package.pop('name')
 
         source_url = urlparse.urljoin(source_site_url, 'dataset/{}'.format(source_name))
