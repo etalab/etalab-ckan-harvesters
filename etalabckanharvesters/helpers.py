@@ -150,7 +150,8 @@ class Harvester(object):
                 continue
             self.existing_packages_name.add(package['name'])
             for resource in (package.get('resources') or []):
-                response = urllib2.urlopen(resource['url'])
+                request = urllib2.Request(resource['url'], headers = self.target_headers)
+                response = urllib2.urlopen(request)
                 packages_csv_reader = csv.reader(response, delimiter = ';', quotechar = '"')
                 packages_csv_reader.next()
                 for row in packages_csv_reader:
