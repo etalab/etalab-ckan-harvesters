@@ -178,14 +178,19 @@ class Harvester(object):
             # Retrieve old supplying organization.
             request = urllib2.Request(urlparse.urljoin(self.target_site_url,
                 'api/3/action/organization_show?id={}'.format(self.old_supplier_name)), headers = self.target_headers)
-            response = urllib2.urlopen(request)
-            response_dict = json.loads(response.read())
-            old_supplier = conv.check(conv.pipe(
-                conv.make_ckan_json_to_organization(drop_none_values = True),
-                conv.not_none,
-                ))(response_dict['result'], state = conv.default_state)
-            self.organization_by_name[self.old_supplier_name] = old_supplier
-            self.retrieve_supplier_existing_packages(old_supplier)
+            try:
+                response = urllib2.urlopen(request)
+            except urllib2.HTTPError as response:
+                if response.code != 404:
+                    raise
+            else:
+                response_dict = json.loads(response.read())
+                old_supplier = conv.check(conv.pipe(
+                    conv.make_ckan_json_to_organization(drop_none_values = True),
+                    conv.not_none,
+                    ))(response_dict['result'], state = conv.default_state)
+                self.organization_by_name[self.old_supplier_name] = old_supplier
+                self.retrieve_supplier_existing_packages(old_supplier)
 
     def update_target(self):
         # Upsert packages to target.
