@@ -41,14 +41,14 @@ import sys
 import urllib2
 import urlparse
 
-from biryani1 import baseconv, custom_conv, states, strings
+from biryani1 import baseconv, custom_conv, datetimeconv, states, strings
 from ckantoolbox import ckanconv
 
 from . import helpers
 
 
 app_name = os.path.splitext(os.path.basename(__file__))[0]
-conv = custom_conv(baseconv, ckanconv, states)
+conv = custom_conv(baseconv, ckanconv, datetimeconv, states)
 format_by_mime_type = {
     u'application/api': u'api',
     u'application/visualisation': u'viz',
@@ -102,6 +102,11 @@ validate_publication = conv.pipe(
                 conv.test_in(license_id_by_name),
                 conv.not_none,
                 ),
+            metadata_created = conv.pipe(
+                conv.timestamp_to_datetime,
+                conv.datetime_to_iso8601_str,
+                conv.not_none,
+                ),
             name = conv.pipe(
                 conv.test_isinstance(basestring),
                 conv.cleanup_line,
@@ -148,6 +153,11 @@ validate_publication = conv.pipe(
                         conv.not_none,
                         ),
                     ),
+                ),
+            revision_timestamp = conv.pipe(
+                conv.timestamp_to_datetime,
+                conv.datetime_to_iso8601_str,
+                conv.not_none,
                 ),
             supplier = conv.pipe(
                 conv.test_isinstance(basestring),
@@ -281,7 +291,7 @@ def main():
                             ),
                         ))
                     ],
-                territorial_coverage = u'Country/FR',
+#                territorial_coverage = u'Country/FR',
                 title = publication['name'],
                 )
             source_url = urlparse.urljoin(source_site_url, publication['url'])
