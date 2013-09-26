@@ -211,6 +211,7 @@ def main():
             u"ministere-de-la-culture-et-de-la-communication": False,  # Direct member of data.gouv.fr
             u"ministere-de-la-justice": False,  # Direct member of data.gouv.fr
             u"ministere-des-sports": False,  # Direct member of data.gouv.fr
+            u"oehc": False,  # Bad titles and descriptions
             u"premier-ministre-direction-de-l-information-legale-et-administrative": False,  # Direct member of data.gouv.fr
             u"ratp": False,  # Direct member of data.gouv.fr
             u"reseau-ferre-de-france": False,  # Direct member of data.gouv.fr
