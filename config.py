@@ -4,7 +4,7 @@
 # Etalab-CKAN-Harvesters -- Harvesters for Etalab's CKAN
 # By: Emmanuel Raviart <emmanuel@raviart.com>
 #
-# Copyright (C) 2013 Emmanuel Raviart
+# Copyright (C) 2013 Etalab
 # http://github.com/etalab/etalab-ckan-harvesters
 #
 # This file is part of Etalab-CKAN-Harvesters.
