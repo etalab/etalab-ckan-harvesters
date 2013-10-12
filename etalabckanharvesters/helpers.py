@@ -195,79 +195,9 @@ class Harvester(object):
     def update_target(self):
         # Upsert packages to target.
         for package_name, package in self.package_by_name.iteritems():
-            if package_name in self.existing_packages_name:
-                log.info(u'Updating package: {}'.format(package['title']))
-                self.existing_packages_name.remove(package_name)
-                request = urllib2.Request(urlparse.urljoin(self.target_site_url,
-                    'api/3/action/package_update?id={}'.format(package_name)), headers = self.target_headers)
-                try:
-                    response = urllib2.urlopen(request, urllib.quote(json.dumps(package)))
-                except urllib2.HTTPError as response:
-                    response_text = response.read()
-                    try:
-                        response_dict = json.loads(response_text)
-                    except ValueError:
-                        log.error(u'An exception occured while updating package: {}'.format(package))
-                        log.error(response_text)
-                        continue
-                    log.error(u'An error occured while updating package: {}'.format(package))
-                    for key, value in response_dict.iteritems():
-                        print '{} = {}'.format(key, value)
-                else:
-                    assert response.code == 200
-                    response_dict = json.loads(response.read())
-                    assert response_dict['success'] is True
-#                    updated_package = response_dict['result']
-#                    pprint.pprint(updated_package)
-            else:
-                log.info(u'Creating package: {}'.format(package['title']))
-                request = urllib2.Request(urlparse.urljoin(self.target_site_url, 'api/3/action/package_create'),
-                    headers = self.target_headers)
-                try:
-                    response = urllib2.urlopen(request, urllib.quote(json.dumps(package)))
-                except urllib2.HTTPError as response:
-                    response_text = response.read()
-                    try:
-                        response_dict = json.loads(response_text)
-                    except ValueError:
-                        log.error(u'An exception occured while creating package: {}'.format(package))
-                        log.error(response_text)
-                        continue
-                    error = response_dict.get('error', {})
-                    if error.get('__type') == u'Validation Error' and error.get('name'):
-                        # A package with the same name already exists. Maybe it is deleted. Undelete it.
-                        package['state'] = 'active'
-                        request = urllib2.Request(urlparse.urljoin(self.target_site_url,
-                            'api/3/action/package_update?id={}'.format(package_name)), headers = self.target_headers)
-                        try:
-                            response = urllib2.urlopen(request, urllib.quote(json.dumps(package)))
-                        except urllib2.HTTPError as response:
-                            response_text = response.read()
-                            try:
-                                response_dict = json.loads(response_text)
-                            except ValueError:
-                                log.error(u'An exception occured while undeleting package: {}'.format(package))
-                                log.error(response_text)
-                                continue
-                            log.error(u'An error occured while undeleting package: {}'.format(package))
-                            for key, value in response_dict.iteritems():
-                                print '{} = {}'.format(key, value)
-                        else:
-                            assert response.code == 200
-                            response_dict = json.loads(response.read())
-                            assert response_dict['success'] is True
-#                            updated_package = response_dict['result']
-#                            pprint.pprint(updated_package)
-                    else:
-                        log.error(u'An error occured while creating package: {}'.format(package))
-                        for key, value in response_dict.iteritems():
-                            print '{} = {}'.format(key, value)
-                else:
-                    assert response.code == 200
-                    response_dict = json.loads(response.read())
-                    assert response_dict['success'] is True
-#                    created_package = response_dict['result']
-#                    pprint.pprint(created_package)
+            log.info(u'Upserting package: {}'.format(package['title']))
+            self.existing_packages_name.discard(package_name)
+            self.upsert_package(package)
 
             # Read updated package.
             request = urllib2.Request(urlparse.urljoin(self.target_site_url,
@@ -544,6 +474,14 @@ class Harvester(object):
             # Update package.
             package['id'] = existing_package['id']
             package['state'] = 'active'
+
+            # Keep existing groups when they already exist.
+            existing_groups = [
+                dict(id = existing_group['id'])
+                for existing_group in (existing_package.get('groups') or [])
+                ]
+            if existing_groups:
+                package['groups'] = existing_groups
 
             request = urllib2.Request(urlparse.urljoin(self.target_site_url,
                 'api/3/action/package_update?id={}'.format(name)), headers = self.target_headers)
