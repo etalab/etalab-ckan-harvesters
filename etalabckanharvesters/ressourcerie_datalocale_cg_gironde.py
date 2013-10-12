@@ -431,6 +431,9 @@ def main():
             organization = harvester.supplier
         if package is None:
             continue
+        frequency = helpers.pop_extra(package, u"Fréquence de mise à jour", default = None)
+        if frequency is not None:
+            package['frequency'] = frequency
         package.pop('groups', None)
         source_name = package.pop('name')
         package.pop('users', None)

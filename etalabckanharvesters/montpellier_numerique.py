@@ -565,16 +565,15 @@ def main():
             title = source_package['dct:title'],
             )
 
+        accrual_periodicity = ((source_package[u'dct:accrualPeriodicity'] or {}).get(u'dct:Frequency') or {}).get(
+            u'rdfs:label')
+        if accrual_periodicity is not None:
+            package['frequency'] = accrual_periodicity_translations[accrual_periodicity]
+
         helpers.set_extra(package, u'Identifiant', source_package[u'dct:identifier'])
         helpers.set_extra(package, u'Mise à jour',
             source_package[u'dct:issued'][-1] if len(source_package[u'dct:issued']) > 1 else None),
         helpers.set_extra(package, u'Publication', source_package[u'dct:issued'][0])
-
-        accrual_periodicity = ((source_package[u'dct:accrualPeriodicity'] or {}).get(u'dct:Frequency') or {}).get(
-            u'rdfs:label')
-        if accrual_periodicity is not None:
-            helpers.set_extra(package, u"Fréquence de mise à jour",
-                accrual_periodicity_translations[accrual_periodicity])
 
         if themes_list:
             helpers.set_extra(package, u'Catégorie', themes_list[0])
