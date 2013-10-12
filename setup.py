@@ -37,10 +37,5 @@ setup(
     author = '',
     author_email = '',
     url = '',
-    install_requires = ['fedmsg'],
     packages = [],
-    entry_points = """
-        [moksha.consumer]
-        etalab-ckan-harvesters = etalabckanharvesters.consumers:EtalabCkanHarvesters
-        """,
     )
