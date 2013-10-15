@@ -45,6 +45,7 @@ log = logging.getLogger(__name__)
 
 class Harvester(object):
     existing_packages_name = None
+    group_by_name = None
     old_supplier_name = None
     old_supplier_title = None
     organization_by_name = None
@@ -52,6 +53,7 @@ class Harvester(object):
     package_by_name = None
     package_source_by_name = None
     packages_by_organization_name = None
+    related_by_package_name = None
     supplier_abbreviation = None
     supplier = None
     supplier_name = None
@@ -90,19 +92,27 @@ class Harvester(object):
         self.target_site_url = target_site_url
 
         self.existing_packages_name = set()
+        self.group_by_name = {}
         self.organization_by_name = {}
         self.organization_name_by_package_name = {}
         self.package_by_name = {}
         self.package_source_by_name = {}
         self.packages_by_organization_name = {}
+        self.related_by_package_name = {}
 
-    def add_package(self, package, organization, source_name, source_url):
+    def add_package(self, package, organization, source_name, source_url, groups = None, related = None):
         name = self.name_package(package['title'])
         if package.get('name') is None:
             package['name'] = name
         else:
             assert package['name'] == name, package
 
+        package['groups'] = [
+            dict(
+                id = group['id'],
+                )
+            for group in (groups or [])
+            ] or None
         package['owner_org'] = organization['id']
         package['supplier_id'] = self.supplier['id']
 
@@ -118,11 +128,14 @@ class Harvester(object):
             url = source_url,
             )
 
+        if related:
+            self.related_by_package_name[name] = related
+
     def name_package(self, title):
         for index in itertools.count(1):
             differentiator = u'-{}'.format(index) if index > 1 else u''
             name = u'{}{}-{}'.format(
-                strings.slugify(title)[:100 - len(self.supplier_abbreviation) - 1 - len(differentiator)],
+                strings.slugify(title)[:100 - len(self.supplier_abbreviation) - 1 - len(differentiator)].rstrip(u'-'),
                 differentiator,
                 self.supplier_abbreviation,
                 )
@@ -210,6 +223,81 @@ class Harvester(object):
                 ))(response_dict['result'], state = conv.default_state)
             self.packages_by_organization_name.setdefault(self.organization_name_by_package_name[package_name],
                 []).append(package)
+
+            # Upsert package's related links.
+            related = self.related_by_package_name.get(package_name)
+            if related:
+                # Retrieve package's related.
+                request = urllib2.Request(urlparse.urljoin(self.target_site_url,
+                    'api/3/action/related_list?id={}'.format(package_name)), headers = self.target_headers)
+                response = urllib2.urlopen(request)
+                response_dict = json.loads(response.read())
+                existing_related = conv.check(conv.pipe(
+                    conv.test_isinstance(list),
+                    conv.uniform_sequence(
+                        conv.make_ckan_json_to_related(drop_none_values = 'missing'),
+                        drop_none_items = True,
+                        ),
+                    conv.empty_to_none,
+                    ))(response_dict['result'], state = conv.default_state)
+                for related_link in related:
+                    related_link['dataset_id'] = package['id']
+                    if related_link.get('description') is None:
+                        # CKAN 2.1 displays "None" when description is missing.
+                        related_link['description'] = u''
+                    for existing_related_link in (existing_related or []):
+                        if existing_related_link['title'] == related_link['title'] and (related_link.get('type') is None
+                                or existing_related_link.get('type') == related_link['type']):
+                            # Update related link.
+                            related_link['id'] = existing_related_link['id']
+
+                            request = urllib2.Request(urlparse.urljoin(self.target_site_url,
+                                'api/3/action/related_update?id={}'.format(related_link['id'])),
+                                headers = self.target_headers)
+                            try:
+                                response = urllib2.urlopen(request, urllib.quote(json.dumps(related_link)))
+                            except urllib2.HTTPError as response:
+                                response_text = response.read()
+                                log.error(u'An exception occured while updating related link: {0}'.format(related_link))
+                                try:
+                                    response_dict = json.loads(response_text)
+                                except ValueError:
+                                    log.error(response_text)
+                                    raise
+                                for key, value in response_dict.iteritems():
+                                    log.debug('{} = {}'.format(key, value))
+                                raise
+                            else:
+                                assert response.code == 200
+                                response_dict = json.loads(response.read())
+                                assert response_dict['success'] is True
+#                                updated_related_link = response_dict['result']
+#                                pprint.pprint(updated_related_link)
+                            break
+                    else:
+                        # Create related link.
+                        request = urllib2.Request(urlparse.urljoin(self.target_site_url, 'api/3/action/related_create'),
+                            headers = self.target_headers)
+                        try:
+                            response = urllib2.urlopen(request, urllib.quote(json.dumps(related_link)))
+                        except urllib2.HTTPError as response:
+                            response_text = response.read()
+                            log.error(u'An exception occured while creating related link: {0}'.format(related_link))
+                            try:
+                                response_dict = json.loads(response_text)
+                            except ValueError:
+                                log.error(response_text)
+                                raise
+                            for key, value in response_dict.iteritems():
+                                log.debug('{} = {}'.format(key, value))
+                            raise
+                        else:
+                            assert response.code == 200
+                            response_dict = json.loads(response.read())
+                            assert response_dict['success'] is True
+#                            created_related_link = response_dict['result']
+#                            pprint.pprint(created_related_link)
+#                            related_link['id'] = created_related_link['id']
 
         # Upsert lists of harvested packages into target.
         for organization_name, organization in self.organization_by_name.iteritems():
@@ -322,6 +410,102 @@ class Harvester(object):
 #                deleted_package = response_dict['result']
 #                pprint.pprint(deleted_package)
 
+    def upsert_group(self, group):
+        name = strings.slugify(group['title'])[:100]
+
+        existing_group = self.group_by_name.get(name)
+        if existing_group is not None:
+            return existing_group
+
+        log.info(u'Upserting group: {}'.format(group['title']))
+        if group.get('name') is None:
+            group['name'] = name
+        else:
+            assert group['name'] == name, group
+
+        request = urllib2.Request(urlparse.urljoin(self.target_site_url,
+            'api/3/action/group_show?id={}'.format(name)), headers = self.target_headers)
+        try:
+            response = urllib2.urlopen(request)
+        except urllib2.HTTPError as response:
+            if response.code != 404:
+                raise
+            existing_group = {}
+        else:
+            response_text = response.read()
+            try:
+                response_dict = json.loads(response_text)
+            except ValueError:
+                log.error(u'An exception occured while reading group: {0}'.format(name))
+                log.error(response_text)
+                raise
+            existing_group = conv.check(conv.pipe(
+                conv.make_ckan_json_to_group(drop_none_values = True),
+                conv.not_none,
+                ))(response_dict['result'], state = conv.default_state)
+
+            group_infos = group
+            group = conv.check(conv.ckan_input_group_to_output_group)(existing_group, state = conv.default_state)
+            group.update(
+                (key, value)
+                for key, value in group_infos.iteritems()
+                if value is not None
+                )
+
+        if existing_group.get('id') is None:
+            # Create group.
+            request = urllib2.Request(urlparse.urljoin(self.target_site_url, 'api/3/action/group_create'),
+                headers = self.target_headers)
+            try:
+                response = urllib2.urlopen(request, urllib.quote(json.dumps(group)))
+            except urllib2.HTTPError as response:
+                response_text = response.read()
+                log.error(u'An exception occured while creating group: {0}'.format(group))
+                try:
+                    response_dict = json.loads(response_text)
+                except ValueError:
+                    log.error(response_text)
+                    raise
+                for key, value in response_dict.iteritems():
+                    log.debug('{} = {}'.format(key, value))
+                raise
+            else:
+                assert response.code == 200
+                response_dict = json.loads(response.read())
+                assert response_dict['success'] is True
+                created_group = response_dict['result']
+#                pprint.pprint(created_group)
+                group['id'] = created_group['id']
+        else:
+            # Update group.
+            group['id'] = existing_group['id']
+            group['state'] = 'active'
+
+            request = urllib2.Request(urlparse.urljoin(self.target_site_url,
+                'api/3/action/group_update?id={}'.format(name)), headers = self.target_headers)
+            try:
+                response = urllib2.urlopen(request, urllib.quote(json.dumps(group)))
+            except urllib2.HTTPError as response:
+                response_text = response.read()
+                log.error(u'An exception occured while updating group: {0}'.format(group))
+                try:
+                    response_dict = json.loads(response_text)
+                except ValueError:
+                    log.error(response_text)
+                    raise
+                for key, value in response_dict.iteritems():
+                    log.debug('{} = {}'.format(key, value))
+                raise
+            else:
+                assert response.code == 200
+                response_dict = json.loads(response.read())
+                assert response_dict['success'] is True
+#                updated_group = response_dict['result']
+#                pprint.pprint(updated_group)
+
+        self.group_by_name[name] = group
+        return group
+
     def upsert_organization(self, organization):
         name = strings.slugify(organization['title'])[:100]
 
@@ -420,11 +604,8 @@ class Harvester(object):
         return organization
 
     def upsert_package(self, package):
-        name = self.name_package(package['title'])
-        if package.get('name') is None:
-            package['name'] = name
-        else:
-            assert package['name'] == name, package
+        name = package.get('name')
+        assert name is not None, package
 
         request = urllib2.Request(urlparse.urljoin(self.target_site_url,
             'api/3/action/package_show?id={}'.format(name)), headers = self.target_headers)
@@ -481,7 +662,16 @@ class Harvester(object):
                 for existing_group in (existing_package.get('groups') or [])
                 ]
             if existing_groups:
-                package['groups'] = existing_groups
+                if package.get('groups'):
+                    groups = package['groups']
+                    for existing_group in existing_groups:
+                        if not any(
+                                group['id'] == existing_group['id']
+                                for group in groups
+                                ):
+                            groups.append(existing_group)
+                else:
+                    package['groups'] = existing_groups
 
             request = urllib2.Request(urlparse.urljoin(self.target_site_url,
                 'api/3/action/package_update?id={}'.format(name)), headers = self.target_headers)
