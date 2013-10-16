@@ -360,6 +360,18 @@ def main():
             u'Nationale': u'Coutry/FR',
             u'Régionale': u'RegionOfFrance/93',
             }.get(record[u'Couverture géographique'])
+        if territorial_coverage is None:
+            territorial_coverage = {
+                (u"Arles Crau Camargue Montagnette", u'Intercommunale'): u'IntercommunalityOfFrance/241300417',
+                (u"Communauté du Pays d'Aix", u'Intercommunale'): u'IntercommunalityOfFrance/241300276',
+                (u"Marseille Provence Métropole", u'Intercommunale'): u'IntercommunalityOfFrance/241300391',
+                (u"Métropole Nice Côte d'Azur", u'Intercommunale'): u'IntercommunalityOfFrance/200030195',
+                (u"Pays d'Aubagne et de l'Etoile", u'Intercommunale'): u'IntercommunalityOfFrance/241300268',
+                (u"SAN Ouest Provence", u'Intercommunale'): u'IntercommunalityOfFrance/241300177',
+                (u"Ville d'Aix-en-Provence", u'Communale'): u'CommuneOfFrance/13001',
+                (u"Ville de Digne-les-Bains", u'Communale'): u'CommuneOfFrance/04070',
+                (u"Ville de Marseille", u'Communale'): u'CommuneOfFrance/13055',
+                }.get((record[u'Producteur'], record[u'Couverture géographique']))
         package = dict(
             frequency = record[u'Fréquence de mises à jour'].lower(),
             license_id = license_id,
