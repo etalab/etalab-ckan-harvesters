@@ -204,10 +204,10 @@ def main():
                     conv.cleanup_line,
                     conv.test_in([
                         u'Annuelle',
-                        u"Au fil de l'eau",
                         u'Aucune',
                         u'Hebdomadaire',
                         u'Mensuelle',
+                        u'Ponctuelle',
                         u'Quotidienne',
                         u'Semestrielle',
                         u'Triennale',
