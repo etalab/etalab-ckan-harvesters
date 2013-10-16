@@ -249,30 +249,81 @@ class Harvester(object):
                         if existing_related_link['title'] == related_link['title'] and (related_link.get('type') is None
                                 or existing_related_link.get('type') == related_link['type']):
                             # Update related link.
-                            related_link['id'] = existing_related_link['id']
-
-                            request = urllib2.Request(urlparse.urljoin(self.target_site_url,
-                                'api/3/action/related_update?id={}'.format(related_link['id'])),
-                                headers = self.target_headers)
-                            try:
-                                response = urllib2.urlopen(request, urllib.quote(json.dumps(related_link)))
-                            except urllib2.HTTPError as response:
-                                response_text = response.read()
-                                log.error(u'An exception occured while updating related link: {0}'.format(related_link))
+                            if existing_related_link.get('description') != related_link.get('description') \
+                                    or existing_related_link.get('image_url') != related_link.get('image_url') \
+                                    or existing_related_link.get('url') != related_link.get('url'):
+                                # Note: Currently, CKAN (2.1) doesn't accept that the owner of a related link updates it
+                                # (even a sysadmin can't do it). So we delete it and recreate it.
+#                                related_link['id'] = existing_related_link['id']
+#                                request = urllib2.Request(urlparse.urljoin(self.target_site_url,
+#                                    'api/3/action/related_update?id={}'.format(related_link['id'])),
+#                                    headers = self.target_headers)
+#                                try:
+#                                    response = urllib2.urlopen(request, urllib.quote(json.dumps(related_link)))
+#                                except urllib2.HTTPError as response:
+#                                    response_text = response.read()
+#                                    log.error(u'An exception occured while updating related link: {0}'.format(
+#                                        related_link))
+#                                    try:
+#                                        response_dict = json.loads(response_text)
+#                                    except ValueError:
+#                                        log.error(response_text)
+#                                        raise
+#                                    for key, value in response_dict.iteritems():
+#                                        log.debug('{} = {}'.format(key, value))
+#                                    raise
+#                                else:
+#                                    assert response.code == 200
+#                                    response_dict = json.loads(response.read())
+#                                    assert response_dict['success'] is True
+##                                    updated_related_link = response_dict['result']
+##                                    pprint.pprint(updated_related_link)
+                                # Delete existing related link.
+                                request = urllib2.Request(urlparse.urljoin(self.target_site_url,
+                                    'api/3/action/related_delete?id={}'.format(existing_related_link['id'])),
+                                    headers = self.target_headers)
                                 try:
-                                    response_dict = json.loads(response_text)
-                                except ValueError:
-                                    log.error(response_text)
+                                    response = urllib2.urlopen(request, urllib.quote(json.dumps(existing_related_link)))
+                                except urllib2.HTTPError as response:
+                                    response_text = response.read()
+                                    log.error(u'An exception occured while deleting related link: {0}'.format(
+                                        existing_related_link))
+                                    try:
+                                        response_dict = json.loads(response_text)
+                                    except ValueError:
+                                        log.error(response_text)
+                                        raise
+                                    for key, value in response_dict.iteritems():
+                                        log.debug('{} = {}'.format(key, value))
                                     raise
-                                for key, value in response_dict.iteritems():
-                                    log.debug('{} = {}'.format(key, value))
-                                raise
-                            else:
-                                assert response.code == 200
-                                response_dict = json.loads(response.read())
-                                assert response_dict['success'] is True
-#                                updated_related_link = response_dict['result']
-#                                pprint.pprint(updated_related_link)
+                                else:
+                                    assert response.code == 200
+                                    response_dict = json.loads(response.read())
+                                    assert response_dict['success'] is True
+                                # Recreate related link.
+                                request = urllib2.Request(urlparse.urljoin(self.target_site_url,
+                                    'api/3/action/related_create'), headers = self.target_headers)
+                                try:
+                                    response = urllib2.urlopen(request, urllib.quote(json.dumps(related_link)))
+                                except urllib2.HTTPError as response:
+                                    response_text = response.read()
+                                    log.error(u'An exception occured while creating related link: {0}'.format(
+                                        related_link))
+                                    try:
+                                        response_dict = json.loads(response_text)
+                                    except ValueError:
+                                        log.error(response_text)
+                                        raise
+                                    for key, value in response_dict.iteritems():
+                                        log.debug('{} = {}'.format(key, value))
+                                    raise
+                                else:
+                                    assert response.code == 200
+                                    response_dict = json.loads(response.read())
+                                    assert response_dict['success'] is True
+#                                    created_related_link = response_dict['result']
+#                                    pprint.pprint(created_related_link)
+#                                    related_link['id'] = created_related_link['id']
                             break
                     else:
                         # Create related link.
