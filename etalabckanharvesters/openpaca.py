@@ -389,6 +389,8 @@ def main():
             helpers.set_extra(package, u"Conditions d'utilisation", record[u"Conditions d'utilisation"])
         if territorial_coverage is None:
             helpers.set_extra(package, u"Couverture géographique", record[u"Couverture géographique"])
+        if record[u"Langues"] != u'Français':
+            helpers.set_extra(package, u'Langues', u', '.join(record[u"Langues"]))
         helpers.set_extra(package, u'Propriétaire', record[u"Propriétaire"])
         helpers.set_extra(package, u'Date de création de la donnée', record[u'Date de création de la donnée'])
         helpers.set_extra(package, u'Date de dernière mise à jour publiée',
