@@ -357,6 +357,7 @@ def main():
             ))
         territorial_coverage = {
             u'Européenne': u'InternationalOrganization/EU',
+            u'Internationale': u'InternationalOrganization/WW',
             u'Nationale': u'Coutry/FR',
             u'Régionale': u'RegionOfFrance/93',
             }.get(record[u'Couverture géographique'])
