@@ -32,6 +32,7 @@ http://www.nosdonnees.fr/
 
 import argparse
 import ConfigParser
+import itertools
 import json
 import logging
 import os
@@ -40,7 +41,7 @@ import urllib
 import urllib2
 import urlparse
 
-from biryani1 import baseconv, custom_conv, states
+from biryani1 import baseconv, custom_conv, states, strings
 from ckantoolbox import ckanconv
 
 from . import helpers
@@ -86,6 +87,7 @@ def after_ckan_json_to_package(package, state = None):
             if resource.pop('capacity', None) == u'private':
                 continue
             resource.pop('revision_id', None)
+            resource.pop('URI', None)
             resources.append(resource)
         package['resources'] = resources
 
@@ -170,27 +172,44 @@ def main():
             continue
 
         package_groups = package.pop('groups', None)
-        tags = [
-            dict(
-                name = group['name'],
-                )
+        groups_name = [
+            group['name']
             for group in (package_groups or [])
             ]
-        for index, tag in enumerate(tags[:]):
-            tag_name = tag['name']
-            if tag_name == 'brocas':
-                del tags[index]
-                package['territorial_coverage'] = u'CommuneOfFrance/40056'
-            elif tag_name == 'strasbourg':
-                del tags[index]
-                package['territorial_coverage'] = u'IntercommunalityOfFrance/246700488'  # CU de Strasbourg
-        if tags:
-            package.setdefault('tags', []).extend(tags)
+        if 'brocas' in groups_name:
+            # Brocas is already imported from Resourcerie Datalocale.
+            continue
+        if 'strasbourg' in groups_name:
+            groups_name.remove('strasbourg')
+            package['territorial_coverage'] = u'IntercommunalityOfFrance/246700488'  # CU de Strasbourg
+        package['tags'] = [
+            dict(
+                name = tag_slug,
+                )
+            for tag_slug in sorted(set(
+                strings.slugify(tag_name)
+                for tag_name in itertools.chain(
+                    (
+                        tag['name']
+                        for tag in (package.get('tags') or [])
+                        ),
+                    groups_name,
+                    )
+                ))
+            ]
 
+        url = package.pop('url', None)
+        if url is not None:
+            if 'opendata71' in url:
+                continue  # Opendata71 is harvested by itself.
+            package.setdefault(u'resources', []).append(dict(
+                format = u'HTML',
+                name = u'Source',
+                url = url,
+                ))
         source_name = package.pop('name')
-
         source_url = urlparse.urljoin(source_site_url, 'dataset/{}'.format(source_name))
-        helpers.set_extra(package, u'Source', source_url)
+        package[u'url'] = source_url
 
         package = conv.check(conv.ckan_input_package_to_output_package)(package, state = conv.default_state)
         log.info(u'Harvested package: {}'.format(package['title']))
