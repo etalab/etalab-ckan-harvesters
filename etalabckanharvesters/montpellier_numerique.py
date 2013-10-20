@@ -51,7 +51,7 @@ accrual_periodicity_translations = {
     u"Annuelle": u"annuelle",
     u"Hebdomadaire": u"hebdomadaire",
     u"Journalière": u"quotidienne",
-    u"ponctuelle": u"au fil de l'eau",
+    u"ponctuelle": u"ponctuelle",
     }
 app_name = os.path.splitext(os.path.basename(__file__))[0]
 conv = custom_conv(baseconv, datetimeconv, states)

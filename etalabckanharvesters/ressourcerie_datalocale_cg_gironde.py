@@ -143,21 +143,21 @@ def after_ckan_json_to_package(package, state = None):
                 'dct:accrualPeriodicity': (u"Fréquence de mise à jour", conv.pipe(
                     conv.cleanup_line,
                     conv.translate({
-                        u'Irrégulier': u"au fil de l'eau",
-                        u'irrégulier': u"au fil de l'eau",
-                        u'irrégulière': u"au fil de l'eau",
-                        u'Irrégulière': u"au fil de l'eau",
+                        u'Irrégulier': u"ponctuelle",
+                        u'irrégulier': u"ponctuelle",
+                        u'irrégulière': u"ponctuelle",
+                        u'Irrégulière': u"ponctuelle",
                         u"journalier": u"quotidienne",
-                        u'Tous les 5 ans': u"quinquénale",
+                        u'Tous les 5 ans': u"quinquennale",
                         }),
                     conv.test_in([
                         u"annuelle",
-                        u"au fil de l'eau",
                         u"bimensuelle",
                         u"bimestrielle",
                         u"hebdomadaire",
-                        u"quinquénale"
+                        u"quinquennale"
                         u"mensuelle",
+                        u"ponctuelle",
                         u"quotidienne",
                         u"semestrielle",
                         u"temps réel",
