@@ -112,7 +112,7 @@ class Harvester(object):
                 id = group['id'],
                 )
             for group in (groups or [])
-            ] or None
+            ]
         package['owner_org'] = organization['id']
         package['supplier_id'] = self.supplier['id']
 
