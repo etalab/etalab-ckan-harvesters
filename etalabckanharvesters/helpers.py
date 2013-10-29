@@ -245,6 +245,9 @@ class Harvester(object):
                     if related_link.get('description') is None:
                         # CKAN 2.1 displays "None" when description is missing.
                         related_link['description'] = u''
+                    if related_link.get('url') is None:
+                        # Weckan fails when url is missing.
+                        related_link['url'] = u''
                     for existing_related_link in (existing_related or []):
                         if existing_related_link['title'] == related_link['title'] and (related_link.get('type') is None
                                 or existing_related_link.get('type') == related_link['type']):
