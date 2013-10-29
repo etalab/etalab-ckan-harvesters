@@ -24,12 +24,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-"""Harvest Lutèce from City of Paris
-
-http://dev.lutece.paris.fr/plugins/module-document-ckan/
-"""
-
-
 import argparse
 import ConfigParser
 import logging
