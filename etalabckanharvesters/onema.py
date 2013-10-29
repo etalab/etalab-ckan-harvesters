@@ -46,50 +46,11 @@ conv = custom_conv(baseconv, states)
 log = logging.getLogger(app_name)
 
 
-def after_ckan_json_to_organization(organization, state = None):
-    if organization is None:
-        return None, None
-    organization = organization.copy()
-
-    packages = [
-        package
-        for package in (organization.get('packages') or [])
-        if package.get('type') != 'harvest'
-        ]
-    if not packages:
-        return None, None
-    organization['packages'] = packages
-
-    if organization.get('private', False) or organization.get('capacity') == u'private':
-        return None, None
-
-    return organization, None
-
-
-def after_ckan_json_to_package(package, state = None):
-    if package is None:
-        return package, None
-
-#    package = package.copy()
-
-    return package, None
-
-
-def before_ckan_json_to_package(package, state = None):
-    if package is None:
-        return package, None
-
-    if package.get('type') == 'harvest':
-        return None, None
-
-#    package = package.copy()
-
-    return package, None
-
-
 def main():
     parser = argparse.ArgumentParser(description = __doc__)
     parser.add_argument('config', help = 'path of configuration file')
+    parser.add_argument('-d', '--dry-run', action = 'store_true',
+        help = "simulate harvesting, don't update CKAN repository")
     parser.add_argument('-v', '--verbose', action = 'store_true', help = 'increase output verbosity')
 
     global args
@@ -132,7 +93,8 @@ def main():
         )
     source_site_url = u'http://opendata-sie-back.brgm-rec.fr/geosource/srv/eng/csw'  # Recette environment
 
-    harvester.retrieve_target()
+    if not args.dry_run:
+        harvester.retrieve_target()
 
     # Retrieve short infos of packages in source.
     csw = CatalogueServiceWeb(source_site_url)
@@ -162,35 +124,71 @@ def main():
             index = next_index
 
     # Retrieve packages from source.
+    formats = set()
+    groups = [
+        harvester.upsert_group(dict(
+            title = u'Environnement',
+            )),
+        ]
+    temporals = set()
+    types = set()
     for record_id in record_by_id.iterkeys():
         csw.getrecordbyid(id = [record_id])
         record = csw.records[record_id]
 
-        package = dict(
-            license_id = u'fr-lo',
-            notes = record.abstract,
-            resources = [
-                dict(
-                    description = uri.get('description') or None,
-                    format = record.format,
-                    url = uri['url'],
-                    )
-                for uri in record.uris
-                ],
-            tags = [
-                dict(name = strings.slugify(subject))
-                for subject in record.subjects
-                ],
-#            territorial_coverage = TODO
-            title = record.title,
-            )
-        source_url = u'URL TODO'
-        helpers.set_extra(package, u'Source', source_url)
+        formats.add(record.format)
+        temporals.add(record.temporal)
+        types.add(record.type)
 
-        log.info(u'Harvested package: {}'.format(package['title']))
-        harvester.add_package(package, harvester.supplier, record.title, source_url)
+        if not args.dry_run:
+            package = dict(
+                license_id = u'fr-lo',
+                notes = u'\n\n'.join(
+                    fragment
+                    for fragment in (
+                        record.abstract,
+                        record.source,
+                        )
+                    if fragment
+                    ),
+                resources = [
+                    dict(
+                        description = uri.get('description') or None,
+                        format = {
+                            'CSV': 'CSV',
+                            'ESRI Shapefile': 'SHP',
+                            'MIF / MID': 'MIF / MID',  # TODO?
+                            'RDF': 'RDF',
+                            'SHP': 'SHP',
+                            'Txt': 'TXT',
+                            'WMS': 'WMS',
+                            }.get(record.format, record.format),
+                        name = uri.get('name'),
+                        url = uri['url'],
+                        )
+                    for uri in record.uris
+                    ],
+                tags = [
+                    dict(name = strings.slugify(subject))
+                    for subject in record.subjects
+                    ],
+#                territorial_coverage = TODO
+                # Datasets have a granularity of either "commune" or "poi". Since the both are indexed the same way, use
+                # "poi".
+                territorial_coverage_granularity = 'poi',
+                title = record.title,
+#                url = u'URL TODO',
+                )
 
-    harvester.update_target()
+            log.info(u'Harvested package: {}'.format(package['title']))
+            harvester.add_package(package, harvester.supplier, record.title, package['url'], groups = groups)
+
+    if not args.dry_run:
+        harvester.update_target()
+
+    log.info(u'Formats: {}'.format(sorted(formats)))
+    log.info(u'Temporals: {}'.format(sorted(temporals)))
+    log.info(u'Types: {}'.format(sorted(types)))
 
     return 0
 
