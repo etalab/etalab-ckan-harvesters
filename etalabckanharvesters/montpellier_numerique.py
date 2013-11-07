@@ -534,11 +534,14 @@ def main():
         for distribution in source_package[u'dcat:distribution']:
             sub_distribution = distribution[u'dcat:Distribution']
             resources.append(dict(
+                created = source_package[u'dct:issued'][0],
                 name = sub_distribution[u'dct:title'],
                 format = sub_distribution[u'dct:format'][u'dct:IMT'][u'rdfs:label'].lower(),
+                last_modified = source_package[u'dct:issued'][-1] if len(source_package[u'dct:issued']) > 1 else None,
                 url = sub_distribution[u'dcat:accessURL'],
                 ))
 
+        source_url = source_package[u'@rdf:about'].replace(u'../', u'')
         themes_list = source_package[u'dcat:theme']
 
         package = dict(
@@ -557,12 +560,13 @@ def main():
                     )
                 ],
             territorial_coverage = {
-                u"Hérault": u'DepartmentOfFrance/34',
-                u"Montpellier": u'IntercommunalityOfFrance/243400017',  # CA de Montpellier
-                u"Région Languedoc-Roussillon": u'RegionOfFrance/91',
-                u"Ville de Montpellier": u'CommuneOfFrance/34172',
+                u"Hérault": u'DepartmentOfFrance/34/Hérault',
+                u"Montpellier": u'IntercommunalityOfFrance/243400017/CA de Montpellier',
+                u"Région Languedoc-Roussillon": u'RegionOfFrance/91/Languedoc-Roussillon',
+                u"Ville de Montpellier": u'CommuneOfFrance/34172/Montpellier',
                 }[source_package[u'dct:spatial']],
             title = source_package['dct:title'],
+            url = source_url,
             )
 
         accrual_periodicity = ((source_package[u'dct:accrualPeriodicity'] or {}).get(u'dct:Frequency') or {}).get(
@@ -571,22 +575,22 @@ def main():
             package['frequency'] = accrual_periodicity_translations[accrual_periodicity]
 
         helpers.set_extra(package, u'Identifiant', source_package[u'dct:identifier'])
-        helpers.set_extra(package, u'Mise à jour',
-            source_package[u'dct:issued'][-1] if len(source_package[u'dct:issued']) > 1 else None),
-        helpers.set_extra(package, u'Publication', source_package[u'dct:issued'][0])
-
-        if themes_list:
-            helpers.set_extra(package, u'Catégorie', themes_list[0])
-            if len(themes_list) > 1:
-                helpers.set_extra(package, u'Thème', themes_list[1])
-
         helpers.set_extra(package, u'Langue', source_package[u'dct:language'])
         helpers.set_extra(package, u'Référence', source_package[u'dct:references'])
-        source_url = source_package[u'@rdf:about'].replace(u'../', u'')
-        helpers.set_extra(package, u'Source', source_url)
+
+        if themes_list:
+            groups = [
+                harvester.upsert_group(dict(
+                    title = themes_list[0],
+                    )),
+                ]
+            if len(themes_list) > 1:
+                helpers.set_extra(package, u'Thème', themes_list[1])
+        else:
+            groups = None
 
         log.info(u'Harvested package: {}'.format(package['title']))
-        harvester.add_package(package, organization, source_package['dct:title'], source_url)
+        harvester.add_package(package, organization, source_package['dct:title'], source_url, groups = groups)
 
     harvester.update_target()
 
