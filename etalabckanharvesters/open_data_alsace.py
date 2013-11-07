@@ -401,7 +401,7 @@ def main():
                     created = entry['createdOnDate'].split('T')[0],
                     format = u'JSON',
                     last_modified = entry['lastUpdateDate'].split('T')[0],
-                    name = u'Fichier au format CSV',
+                    name = u'Fichier au format JSON',
                     url = u'http://opendata.alsace.fr/dataserver/CRAL/data/{}?$format=json'.format(entry['id']),
                     ),
                 dict(
