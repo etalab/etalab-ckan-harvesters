@@ -416,7 +416,7 @@ def main():
                 dict(name = tag_name)
                 for tag_name in sorted(set(entry['descriptions']['keywords'] or []))
                 ],
-            territorial_coverage = u'RegionOfFrance/42/Alsace',
+            territorial_coverage = u'RegionOfFrance/42/ALSACE',
             title = entry[u'descriptions'][u'title'],
             url = html_url,
             )
