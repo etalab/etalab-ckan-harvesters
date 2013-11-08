@@ -51,7 +51,7 @@ frequency_by_updateFrequency = {
     u'Mensuelle': u'mensuelle',
     }
 license_id_by_summary = {
-    u"Licence Libre": u'other-free',
+    u"Licence Libre": u'other-open',
     u"Licence ouverte Alsace": u'other-at',
     }
 log = logging.getLogger(app_name)
