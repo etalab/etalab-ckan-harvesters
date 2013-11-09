@@ -355,22 +355,27 @@ def main():
             title = record[u'Producteur'],
             ))
         territorial_coverage = {
-            u'Européenne': u'InternationalOrganization/EU',
-            u'Internationale': u'InternationalOrganization/WW',
-            u'Nationale': u'Coutry/FR',
-            u'Régionale': u'RegionOfFrance/93',
+            u'Européenne': u'InternationalOrganization/UE/UNION EUROPEENNE',
+            u'Internationale': u'InternationalOrganization/WW/MONDE',
+            u'Nationale': u'Country/FR/FRANCE',
+            u'Régionale': u'RegionOfFrance/93/PROVENCE ALPES COTE D AZUR',
             }.get(record[u'Couverture géographique'])
         if territorial_coverage is None:
             territorial_coverage = {
-                (u"Arles Crau Camargue Montagnette", u'Intercommunale'): u'IntercommunalityOfFrance/241300417',
-                (u"Communauté du Pays d'Aix", u'Intercommunale'): u'IntercommunalityOfFrance/241300276',
-                (u"Marseille Provence Métropole", u'Intercommunale'): u'IntercommunalityOfFrance/241300391',
-                (u"Métropole Nice Côte d'Azur", u'Intercommunale'): u'IntercommunalityOfFrance/200030195',
-                (u"Pays d'Aubagne et de l'Etoile", u'Intercommunale'): u'IntercommunalityOfFrance/241300268',
-                (u"SAN Ouest Provence", u'Intercommunale'): u'IntercommunalityOfFrance/241300177',
-                (u"Ville d'Aix-en-Provence", u'Communale'): u'CommuneOfFrance/13001',
-                (u"Ville de Digne-les-Bains", u'Communale'): u'CommuneOfFrance/04070',
-                (u"Ville de Marseille", u'Communale'): u'CommuneOfFrance/13055',
+                (u"Arles Crau Camargue Montagnette", u'Intercommunale'):
+                    u'IntercommunalityOfFrance/241300417/CA ARLES CRAU CAMARGUE MONTAGNETTE',
+                (u"Communauté du Pays d'Aix", u'Intercommunale'):
+                    u'IntercommunalityOfFrance/241300276/CA DU PAYS D AIX EN PROVENCE',
+                (u"Marseille Provence Métropole", u'Intercommunale')
+                     u'IntercommunalityOfFrance/241300391/CU MARSEILLE PROVENCE METROPOLE',
+                (u"Métropole Nice Côte d'Azur", u'Intercommunale'):
+                    u'IntercommunalityOfFrance/200030195/METROPOLE NICE COTE D AZUR',
+                (u"Pays d'Aubagne et de l'Etoile", u'Intercommunale'):
+                    u'IntercommunalityOfFrance/241300268/CA DU PAYS D AUBAGNE ET DE L ETOILE',
+                (u"SAN Ouest Provence", u'Intercommunale'): u'IntercommunalityOfFrance/241300177/SAN OUEST PROVENCE',
+                (u"Ville d'Aix-en-Provence", u'Communale'): u'CommuneOfFrance/13001/13090 AIX EN PROVENCE',
+                (u"Ville de Digne-les-Bains", u'Communale'): u'CommuneOfFrance/04070/04000 DIGNE LES BAINS',
+                (u"Ville de Marseille", u'Communale'): u'CommuneOfFrance/13055/13000 MARSEILLE',
                 }.get((record[u'Producteur'], record[u'Couverture géographique']))
         package = dict(
             frequency = record[u'Fréquence de mises à jour'].lower(),
