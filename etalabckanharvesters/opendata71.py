@@ -358,7 +358,7 @@ Une API permet de manipuler les données en JSON et XML.
             # url = ...,  # url is the same as for the resource => ignore it.
             )
         organization = harvester.upsert_organization(dict(
-            title = u'Conseil général de Saône-et-Loire',
+            title = u'Conseil général de Saône-et-Loire (CG71)',
             ))
 
         harvester.add_package(package, organization, entry[u'entityset'], html_url, groups = groups)
