@@ -560,10 +560,10 @@ def main():
                     )
                 ],
             territorial_coverage = {
-                u"Hérault": u'DepartmentOfFrance/34/Hérault',
-                u"Montpellier": u'IntercommunalityOfFrance/243400017/CA de Montpellier',
-                u"Région Languedoc-Roussillon": u'RegionOfFrance/91/Languedoc-Roussillon',
-                u"Ville de Montpellier": u'CommuneOfFrance/34172/Montpellier',
+                u"Hérault": u'DepartmentOfFrance/34/34 HERAULT',
+                u"Montpellier": u'IntercommunalityOfFrance/243400017/CA DE MONTPELLIER',
+                u"Région Languedoc-Roussillon": u'RegionOfFrance/91/LANGUEDOC ROUSSILLON',
+                u"Ville de Montpellier": u'CommuneOfFrance/34172/34000 MONTPELLIER',
                 }[source_package[u'dct:spatial']],
             title = source_package['dct:title'],
             url = source_url,
