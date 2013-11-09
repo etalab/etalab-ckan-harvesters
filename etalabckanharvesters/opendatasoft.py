@@ -75,7 +75,8 @@ def after_ckan_json_to_package(package, state = None):
     if package is None:
         return package, None
 
-#    package = package.copy()
+    package = package.copy()
+    del package['id']  # Don't reuse source ID in target.
 
     return package, None
 
