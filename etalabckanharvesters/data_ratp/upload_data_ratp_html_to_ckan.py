@@ -177,7 +177,7 @@ def main():
                         assert format is not None, a_html.text
                         resources.append(dict(
                             format = format,
-                            name = u'Document complémentaire' if data_index == 0 \
+                            name = u'Document complémentaire' if data_index == 0
                                 else u'Document complémentaire {}'.format(data_index + 1),
                             url = urlparse.urljoin(base_url, a_html.get('href')),
                             ))
@@ -209,7 +209,6 @@ def main():
                     french_input_to_date,
                     conv.date_to_iso8601_str,
                     ))(update_date_str, state = conv.default_state)
-                publication_date = conv.check(french_input_to_date)(publication_date_str, state = conv.default_state)
                 validity_period = fields.pop(u'Période de validité :')
                 if validity_period in (None, u'Période de validité'):
                     temporal_coverage_from = None
