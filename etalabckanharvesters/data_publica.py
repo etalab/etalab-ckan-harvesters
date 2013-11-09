@@ -58,6 +58,32 @@ format_by_mime_type = {
     u'application/xml': u'xml',
     u'text/tsv': u'tsv',
     }
+groups_title_translations = {
+    u'Agriculture & Pêche': u'Économie & Travail',
+    u'Arts & Culture': u'Culture',
+    u'Autres': None,
+    u'Banque & Assurance': u'Économie & Travail',
+    u'Climat & Météorologie': u'Habitat & Écologie',
+    u'Collectivités & Elections': u'Territoires',
+    u'Commerce & Services': u'Économie & Travail',
+    u'Economie & Finances': u'Économie & Travail',
+    u'Education & Formation': u'Éducation & Recherche',
+    u'Environnement & Energie': u'Habitat & Écologie',
+    u'Géographie & Espace': u'Habitat & Écologie',
+    u'Immobilier & Construction': u'Habitat & Écologie',
+    u'Industrie & Production': u'Économie & Travail',
+    u'Informatique & Communications': u'Économie & Travail',
+    u'Population & Démographie': u'Société',
+    u'Presse & Médias': u'Culture',
+    u'Santé & Nutrition': u'Santé & Social',
+    u'Sciences & Technologies': u'Éducation & Recherche',
+    u'Sociétés & Conditions de vie': u'Société',
+    u'Sports & Loisirs': u'Santé & Social',
+    u'Sécurité & Justice': u'Société',
+    u'Tourisme & Voyages': u'Habitat & Écologie',
+    u'Transport & Logistique': u'Habitat & Écologie',
+    u'Travail & Salaires': u'Économie & Travail',
+    }
 license_id_by_name = {
     u'Licence Banque Mondiale': u'fr-lo',
     u'Licence EuroStat': u'fr-lo',
@@ -80,32 +106,7 @@ validate_publication = conv.pipe(
                 conv.uniform_sequence(
                     conv.pipe(
                         conv.test_isinstance(basestring),
-                        conv.test_in([
-                            u'Agriculture & Pêche': u'Économie & Travail',
-                            u'Arts & Culture': u'Culture',
-                            u'Autres': None,
-                            u'Banque & Assurance': u'Économie & Travail',
-                            u'Climat & Météorologie': u'Habitat & Écologie',
-                            u'Collectivités & Elections': u'Territoires',
-                            u'Commerce & Services': u'Économie & Travail',
-                            u'Economie & Finances': u'Économie & Travail',
-                            u'Education & Formation': u'Éducation & Recherche',
-                            u'Environnement & Energie': u'Habitat & Écologie',
-                            u'Géographie & Espace': u'Habitat & Écologie',
-                            u'Immobilier & Construction': u'Habitat & Écologie',
-                            u'Industrie & Production': u'Économie & Travail',
-                            u'Informatique & Communications': u'Économie & Travail',
-                            u'Population & Démographie': u'Société',
-                            u'Presse & Médias': u'Culture',
-                            u'Santé & Nutrition': u'Santé & Social',
-                            u'Sciences & Technologies': u'Éducation & Recherche',
-                            u'Sociétés & Conditions de vie': u'Société',
-                            u'Sports & Loisirs': u'Santé & Social',
-                            u'Sécurité & Justice': u'Société',
-                            u'Tourisme & Voyages': u'Habitat & Écologie',
-                            u'Transport & Logistique': u'Habitat & Écologie',
-                            u'Travail & Salaires': u'Économie & Travail',
-                            ]),
+                        conv.test_in(groups_title_translations),
                         conv.not_none,
                         ),
                     ),
@@ -257,7 +258,7 @@ def main():
     if not args.dry_run:
         harvester.retrieve_target()
 
-    groups = set()
+    groups_title = set()
     # Retrieve packages from source.
     for page_index in itertools.count():
         page_url = urlparse.urljoin(source_site_url, u'?p={}'.format(page_index))
@@ -274,7 +275,14 @@ def main():
                 conv.not_none,
                 ))(publication, state = conv.default_state)
 
-            groups.update(publication['groups'])
+            groups_title.update(publication['groups'] or [])
+            if not args.dry_run:
+                groups = [
+                    harvester.upsert_group(dict(
+                        title = group_title,
+                        ))
+                    for group_title in (publication['groups'] or [])
+                    ]
 
             organization_title = publication['organization']
             if not args.dry_run:
@@ -298,20 +306,12 @@ def main():
                     ],
                 tags = [
                     dict(name = strings.slugify(tag_name))
-                    for tag_name in sorted(itertools.chain(
-                        (
-                            tag['name']
-                            for tag in (publication['tags'] or [])
-                            ),
-                        (
-                            sub_fragment
-                            for group in (publication['groups'] or [])
-                            for fragment in group.split(u'&')
-                            for sub_fragment in fragment.split(u',')
-                            ),
+                    for tag_name in sorted(set(
+                        tag['name']
+                        for tag in (publication['tags'] or [])
                         ))
                     ],
-#                territorial_coverage = u'Country/FR',
+#                territorial_coverage = u'Country/FR/FRANCE',
                 title = publication['name'],
                 )
             source_url = urlparse.urljoin(source_site_url, publication['url'])
@@ -319,12 +319,12 @@ def main():
 
             log.info(u'Harvested package: {}'.format(package['title']))
             if not args.dry_run:
-                harvester.add_package(package, organization, publication['name'], source_url)
+                harvester.add_package(package, organization, publication['name'], source_url, groups = groups)
 
     if not args.dry_run:
         harvester.update_target()
 
-    log.info(u'Groups: {}'.format(sorted(groups)))
+    log.info(u'Groups: {}'.format(sorted(groups_title)))
 
     return 0
 
