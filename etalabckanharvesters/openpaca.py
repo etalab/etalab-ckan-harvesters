@@ -366,8 +366,8 @@ def main():
                     u'IntercommunalityOfFrance/241300417/CA ARLES CRAU CAMARGUE MONTAGNETTE',
                 (u"Communauté du Pays d'Aix", u'Intercommunale'):
                     u'IntercommunalityOfFrance/241300276/CA DU PAYS D AIX EN PROVENCE',
-                (u"Marseille Provence Métropole", u'Intercommunale')
-                     u'IntercommunalityOfFrance/241300391/CU MARSEILLE PROVENCE METROPOLE',
+                (u"Marseille Provence Métropole", u'Intercommunale'):
+                    u'IntercommunalityOfFrance/241300391/CU MARSEILLE PROVENCE METROPOLE',
                 (u"Métropole Nice Côte d'Azur", u'Intercommunale'):
                     u'IntercommunalityOfFrance/200030195/METROPOLE NICE COTE D AZUR',
                 (u"Pays d'Aubagne et de l'Etoile", u'Intercommunale'):
