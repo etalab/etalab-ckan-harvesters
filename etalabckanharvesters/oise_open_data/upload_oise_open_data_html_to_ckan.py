@@ -64,7 +64,7 @@ license_id_by_name = {
 log = logging.getLogger(app_name)
 name_re = re.compile(u'(\{(?P<url>.+)\})?(?P<name>.+)$')
 territorial_coverage_translations = {
-    u"Département de l'Oise": u'60 OISE',
+    u"Département de l'Oise": u'DepartmentOfFrance/60/60 OISE',
     }
 trimester_re = re.compile(ur'T(?P<trimester>[1-4]) (?P<year>\d{4})$')
 year_re = re.compile(ur'Année (?P<year>\d{4})$')
