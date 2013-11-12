@@ -55,6 +55,9 @@ frequency_translations = {
     u"Echeance variable": u"ponctuelle",
     u"Semestrielle": u"semestrielle",
     }
+license_id_translations = {
+    u'lool': u'fr-lo',
+    }
 log = logging.getLogger(app_name)
 source_site_url = None
 
@@ -84,8 +87,10 @@ def before_ckan_json_to_package(package, state = None):
                 group['image_url'] = urlparse.urljoin(source_site_url, image_url)
             package['groups'].append(group)
 
-    if package.get('license_id') == u'lool':
-        package['license_id'] = u'fr-lo'
+    package['license_id'] = conv.check(conv.pipe(
+        conv.test_in(license_id_translations),
+        conv.translate(license_id_translations),
+        ))(package['license_id'], state = state)
 
     organization = package.get('organization')
     if organization is not None:
