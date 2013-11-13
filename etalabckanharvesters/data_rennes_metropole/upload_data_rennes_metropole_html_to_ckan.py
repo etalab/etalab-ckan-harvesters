@@ -26,29 +26,72 @@
 
 import argparse
 import ConfigParser
+import datetime
 import logging
 import os
 import re
 import sys
 import urlparse
 
-from biryani1 import baseconv, custom_conv, states
+from biryani1 import baseconv, custom_conv, datetimeconv, states, strings
 from lxml import etree
 
 from .. import helpers
 
 
 app_name = os.path.splitext(os.path.basename(__file__))[0]
-conv = custom_conv(baseconv, states)
+conv = custom_conv(baseconv, datetimeconv, states)
 data_filename_re = re.compile('data-(?P<number>\d+)\.html$')
+french_date_re = re.compile(ur'(?P<day>0?[1-9]|[12]\d|3[01]) (?P<month>.+) (?P<year>[12]\d\d\d)')
+french_numeric_date_re = re.compile(ur'(?P<day>0?[1-9]|[12]\d|3[01])/(?P<month>0?[1-9]|1[0-2])/(?P<year>[12]\d\d\d)')
 html_parser = etree.HTMLParser()
+license_id_by_str = {
+    u"Licence infolocale": u'other-open',
+    u"Licence Rennes Métropole V2": u'other-at',
+    u"Open Database License (ODbL)": u'odc-odbl',
+    }
 log = logging.getLogger(app_name)
+
+
+def french_input_to_date(value, state = None):
+    if value is None:
+        return value, None
+    match = french_numeric_date_re.match(value)
+    if match is None:
+        match = french_date_re.match(value)
+        if match is None:
+            return value, (state or conv.default_state)._(u"Invalid french date")
+        return datetime.date(
+            int(match.group('year')),
+            {
+                u'août': 8,
+                u'avril': 4,
+                u'décembre': 12,
+                u'février': 2,
+                u'janvier': 1,
+                u'juin': 6,
+                u'juillet': 7,
+                u'mai': 5,
+                u'mars': 3,
+                u'novembre': 11,
+                u'octobre': 10,
+                u'septembre': 9,
+                }[match.group('month')],
+            int(match.group('day')),
+            ), None
+    return datetime.date(
+        int(match.group('year')),
+        int(match.group('month')),
+        int(match.group('day')),
+        ), None
 
 
 def main():
     parser = argparse.ArgumentParser(description = __doc__)
     parser.add_argument('config', help = 'path of configuration file')
     parser.add_argument('download_dir', help = 'directory where are stored downloaded HTML pages')
+    parser.add_argument('-d', '--dry-run', action = 'store_true',
+        help = "simulate harvesting, don't update CKAN repository")
     parser.add_argument('-v', '--verbose', action = 'store_true', help = 'increase output verbosity')
 
     global args
@@ -105,7 +148,8 @@ def main():
             data_number = int(match.group('number'))
             data_file_path_by_number[data_number] = data_file_path
 
-    harvester.retrieve_target()
+    if not args.dry_run:
+        harvester.retrieve_target()
 
     # Convert source HTML packages to CKAN JSON.
     for data_number, data_file_path in sorted(data_file_path_by_number.iteritems()):
@@ -153,19 +197,35 @@ def main():
                     './/div[@class="tx_icsopendatastore_pi1_categories separator"]/p[@class="value description"]')
                 categories_str = categories_html_list[0].text.strip() or None if categories_html_list else None
                 tags = [
-                    dict(name = category_str)
-                    for category_str in categories_str.split(u', ')
+                    dict(name = tag_name)
+                    for tag_name in sorted(set(
+                        strings.slugify(category_fragment)
+                        for category_str in categories_str.split(u',')
+                        for category_fragment in category_str.split(u':')
+                        ))
                     ]
+                if not args.dry_run:
+                    groups = [
+                        harvester.upsert_group(dict(
+                            title = categories_str.split(u',')[0].strip(),
+                            )),
+                        ] if categories_str else None
 
                 release_date_html_list = dataset_html.xpath(
                     './/div[@class="tx_icsopendatastore_pi1_releasedate separator"]/p[@class="value description"]')
-                release_date_str = release_date_html_list[0].text.strip() or None if release_date_html_list else None
-                # TODO: Convert french date format to ISO.
+                release_date_str = release_date_html_list[0].text if release_date_html_list else None
+                release_date_iso8601_str = conv.check(conv.pipe(
+                    french_input_to_date,
+                    conv.date_to_iso8601_str,
+                    ))(release_date_str, state = conv.default_state)
 
                 update_date_html_list = dataset_html.xpath(
                     './/div[@class="tx_icsopendatastore_pi1_updatedate separator"]/p[@class="value description"]')
-                update_date_str = update_date_html_list[0].text.strip() or None if update_date_html_list else None
-                # TODO: Convert french date format to ISO.
+                update_date_str = update_date_html_list[0].text if update_date_html_list else None
+                update_date_iso8601_str = conv.check(conv.pipe(
+                    french_input_to_date,
+                    conv.date_to_iso8601_str,
+                    ))(update_date_str, state = conv.default_state)
 
                 description_html_list = dataset_html.xpath(
                     './/div[@class="tx_icsopendatastore_pi1_description separator"]/p[@class="value description"]')
@@ -177,38 +237,50 @@ def main():
                 technical_data_str = technical_data_html_list[0].text.strip() or None if technical_data_html_list \
                     else None
 
-                resources = [
-                    dict(
+                license_html_list = dataset_html.xpath(
+                    './/div[@class="tx_icsopendatastore_pi1_licence separator"]/p[@class="value owner"]/a')
+                license_str = license_html_list[0].text if license_html_list else None
+                license_id = conv.check(conv.pipe(
+                    conv.cleanup_line,
+                    conv.test_in(license_id_by_str),
+                    conv.translate(license_id_by_str),
+                    ))(license_str, state = conv.default_state)
+
+                resources = []
+                for resource_html in dataset_html.xpath('.//div[@class="tx_icsopendatastore_pi1_file"]'):
+                    resource_url = urlparse.urljoin(base_url, resource_html.xpath('.//a[@href]')[0].get('href'))
+                    resources.append(dict(
+                        created = release_date_iso8601_str,
                         format = resource_html.xpath('.//span[@class="coin"]')[0].text.strip() or None,
-                        url = urlparse.urljoin(base_url, resource_html.xpath('.//a[@href]')[0].get('href')),
-                        )
-                    for resource_html in dataset_html.xpath('.//div[@class="tx_icsopendatastore_pi1_file"]')
-                    ]
+                        last_modified = update_date_iso8601_str,
+                        name = resource_url.rsplit(u'/', 1)[-1],
+                        url = resource_url,
+                        ))
             except:
                 print 'An exception occured in file {0}'.format(data_number)
                 raise
 
         package = dict(
             author = author,
+            license_id = license_id,
             maintainer = contact_str,
             notes = description_str,
             resources = resources,
             tags = tags,
-            territorial_coverage = u'IntercommunalityOfFrance/243500139',  # Rennes-Métropole, TODO
+            territorial_coverage = u'IntercommunalityOfFrance/243500139/CA RENNES METROPOLE',
             title = title_str,
+            url = u'http://www.data.rennes-metropole.fr/les-donnees/catalogue/?tx_icsopendatastore_pi1[uid]={}' \
+                .format(data_number),
             )
         helpers.set_extra(package, u'Données techniques', technical_data_str)
         helpers.set_extra(package, u'Auteur', creator_str)
         helpers.set_extra(package, u'Propriétaire', owner_str)
-        helpers.set_extra(package, u'Date de mise à disposition', release_date_str)
-        helpers.set_extra(package, u'Date de mise à jour', update_date_str)
-        source_url = u'http://www.data.rennes-metropole.fr/les-donnees/catalogue/?tx_icsopendatastore_pi1[uid]={}' \
-            .format(data_number)
-        helpers.set_extra(package, u'Source', source_url)
 
-        harvester.add_package(package, organization, package['title'], source_url)
+        if not args.dry_run:
+            harvester.add_package(package, organization, package['title'], package['url'], groups = groups)
 
-    harvester.update_target()
+    if not args.dry_run:
+        harvester.update_target()
 
     return 0
 
