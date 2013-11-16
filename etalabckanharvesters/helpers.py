@@ -44,6 +44,7 @@ log = logging.getLogger(__name__)
 
 
 class Harvester(object):
+    admin_name = None
     existing_packages_name = None
     group_by_name = None
     old_supplier_name = None
@@ -61,8 +62,11 @@ class Harvester(object):
     target_headers = None
     target_site_url = None
 
-    def __init__(self, old_supplier_title = None, supplier_abbreviation = None, supplier_title = None,
-            target_headers = None, target_site_url = None):
+    def __init__(self, admin_name = None, old_supplier_title = None, supplier_abbreviation = None,
+            supplier_title = None, target_headers = None, target_site_url = None):
+        if admin_name is not None:
+            self.admin_name = admin_name
+
         if old_supplier_title is not None:
             assert isinstance(old_supplier_title, unicode)
             self.old_supplier_title = old_supplier_title
@@ -175,17 +179,11 @@ class Harvester(object):
                     self.existing_packages_name.add(package_infos['name'])
 
     def retrieve_target(self):
-        # Retrieve supplying organization (that will contain all harvested datasets).
-        request = urllib2.Request(urlparse.urljoin(self.target_site_url,
-            'api/3/action/organization_show?id={}'.format(self.supplier_name)), headers = self.target_headers)
-        response = urllib2.urlopen(request)
-        response_dict = json.loads(response.read())
-        supplier = conv.check(conv.pipe(
-            conv.make_ckan_json_to_organization(drop_none_values = True),
-            conv.not_none,
-            ))(response_dict['result'], state = conv.default_state)
-        self.organization_by_name[self.supplier_name] = self.supplier = supplier
-        self.retrieve_supplier_existing_packages(supplier)
+        # Upsert supplying organization (that will contain all harvested datasets).
+        self.supplier = self.upsert_organization(dict(
+            title = self.supplier_title,
+            ))
+        self.retrieve_supplier_existing_packages(self.supplier)
 
         if self.old_supplier_name is not None:
             # Retrieve old supplying organization.
@@ -602,6 +600,22 @@ class Harvester(object):
                 for key, value in organization_infos.iteritems()
                 if value is not None
                 )
+
+        if self.admin_name is not None:
+            # Add admin to organization when organization has no admin yet.
+            users = organization.get('users')
+            if users is None:
+                organization['users'] = users = []
+            if not users:
+                users.append(dict(
+                    capacity = 'admin',
+                    name = self.admin_name,
+                    ))
+            elif len(users) == 1 and users[0]['name'] == 'etalabot':
+                users[0] = dict(
+                    capacity = 'admin',
+                    name = self.admin_name,
+                    )
 
         if existing_organization.get('id') is None:
             # Create organization.
