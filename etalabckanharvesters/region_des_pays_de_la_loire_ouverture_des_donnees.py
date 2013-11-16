@@ -24,9 +24,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-"""Harvest open data from "Loire-Atlantique ouverture des données publiques".
+"""Harvest open data from "Région des Pays de la Loire ouverture des données publiques".
 
-http://data.loire-atlantique.fr/
+http://data.paysdelaloire.fr/
 """
 
 
@@ -411,7 +411,7 @@ def main():
 
     harvester = helpers.Harvester(
         supplier_abbreviation = u'laod',
-        supplier_title = u'Loire-Atlantique ouverture des données publiques',
+        supplier_title = u'Région des Pays de la Loire ouverture des données publiques',
         target_headers = {
             'Authorization': conf['ckan.api_key'],
             'User-Agent': conf['user_agent'],
@@ -421,7 +421,7 @@ def main():
     source_headers = {
         'User-Agent': conf['user_agent'],
         }
-    source_site_url = u'http://data.loire-atlantique.fr/'
+    source_site_url = u'http://data.paysdelaloire.fr/'
 
     if not args.dry_run:
         harvester.retrieve_target()
