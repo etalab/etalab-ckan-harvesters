@@ -148,7 +148,7 @@ class Harvester(object):
 
     def retrieve_supplier_existing_packages(self, supplier):
         for package in (supplier.get('packages') or []):
-            if not package['name'].startswith('jeux-de-donnees-'):
+            if not 'name' in package or not package['name'].startswith('jeux-de-donnees-'):
                 continue
             request = urllib2.Request(urlparse.urljoin(self.target_site_url,
                 'api/3/action/package_show?id={}'.format(package['name'])), headers = self.target_headers)
