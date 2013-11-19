@@ -59,7 +59,7 @@ frequency_by_accrualperiodicity = {
     u'Variable': u"ponctuelle",
     }
 granularity_translations = {
-    u'Gare' : u'poi',
+    u'Gare': u'poi',
     u'Par gare': u'poi',
     }
 license_id_by_license = {

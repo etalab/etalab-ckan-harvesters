@@ -182,20 +182,23 @@ def main():
         if 'strasbourg' in groups_name:
             groups_name.remove('strasbourg')
             package['territorial_coverage'] = u'IntercommunalityOfFrance/246700488'  # CU de Strasbourg
+        tags_slug = sorted(set(
+            strings.slugify(tag_name)
+            for tag_name in itertools.chain(
+                (
+                    tag['name']
+                    for tag in (package.get('tags') or [])
+                    ),
+                groups_name,
+                )
+            ))
+        if u'rennes' in tags_slug:
+            continue
         package['tags'] = [
             dict(
                 name = tag_slug,
                 )
-            for tag_slug in sorted(set(
-                strings.slugify(tag_name)
-                for tag_name in itertools.chain(
-                    (
-                        tag['name']
-                        for tag in (package.get('tags') or [])
-                        ),
-                    groups_name,
-                    )
-                ))
+            for tag_slug in tags_slug
             ]
 
         url = package.pop('url', None)

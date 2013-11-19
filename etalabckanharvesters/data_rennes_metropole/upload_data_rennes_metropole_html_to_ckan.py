@@ -44,6 +44,11 @@ conv = custom_conv(baseconv, datetimeconv, states)
 data_filename_re = re.compile('data-(?P<number>\d+)\.html$')
 french_date_re = re.compile(ur'(?P<day>0?[1-9]|[12]\d|3[01]) (?P<month>.+) (?P<year>[12]\d\d\d)')
 french_numeric_date_re = re.compile(ur'(?P<day>0?[1-9]|[12]\d|3[01])/(?P<month>0?[1-9]|1[0-2])/(?P<year>[12]\d\d\d)')
+frequency_translations = {
+    u"annuelle": u"annuelle",
+    u"mensuelle": u"mensuelle",
+    u"Quotidienne": u"quotidienne",
+    }
 html_parser = etree.HTMLParser()
 license_id_by_str = {
     u"Licence infolocale": u'other-open',
@@ -51,6 +56,16 @@ license_id_by_str = {
     u"Open Database License (ODbL)": u'odc-odbl',
     }
 log = logging.getLogger(app_name)
+organization_titles_by_owner_str = {
+    u"Arts vivants en Ille-et-Vilaine": (u"Arts vivants en Ille-et-Vilaine", None),
+    u"Association Trans Musicales": (u"Association Trans Musicales", None),
+    u"Direction des Affaires Financières": (u"Rennes Métropole", u"Direction des Affaires Financières"),
+    u"Infocolale/Ouest-France": (u"Ouest France", u"Infolocale.fr"),
+    u"Keolis Rennes": (u"Keolis", u"Keolis Rennes"),
+    u"Rennes Métropole": (u"Rennes Métropole", None),
+    u"Service SIG Rennes Métropole": (u"Rennes Métropole", u"Service SIG Rennes Métropole"),
+    u"Ville de Rennes": (u"Ville de Rennes", None),
+    }
 
 
 def french_input_to_date(value, state = None):
@@ -124,8 +139,9 @@ def main():
         ))(dict(config_parser.items('Etalab-CKAN-Harvesters')), conv.default_state)
 
     harvester = helpers.Harvester(
+        admin_name = u'b-dot-kessler-at-agglo-rennesmetropole-dot-fr',
         supplier_abbreviation = u'rm',
-        supplier_title = u'Rennes Métropole',
+        supplier_title = u'Rennes Métropole en accès libre',
         target_headers = {
             'Authorization': conf['ckan.api_key'],
             'User-Agent': conf['user_agent'],
@@ -168,18 +184,6 @@ def main():
                 publisher_html_list = dataset_html.xpath(
                     './/div[@class="tx_icsopendatastore_pi1_publisher separator"]/p[@class="value description"]')
                 publisher_str = publisher_html_list[0].text.strip() or None if publisher_html_list else None
-                organization_title, author = {
-                    None: (u"Rennes Métropole", None),
-                    u"Direction des Affaires Financières": (u"Rennes Métropole", u"Direction des Affaires Financières"),
-                    u"Keolis Rennes": (u"Keolis", u"Keolis Rennes"),
-                    u"Rennes Métropole": (u"Rennes Métropole", None),
-                    u"Service DPAP Ville  de Rennes": (u"Ville de Rennes", u"Service DPAP"),
-                    u"Service SIG Rennes Métropole": (u"Rennes Métropole", u"Service SIG Rennes Métropole"),
-                    u"Ville de Rennes": (u"Ville de Rennes", None),
-                    }.get(publisher_str, (u"Rennes Métropole", publisher_str))
-                organization = harvester.upsert_organization(dict(
-                    title = organization_title,
-                    ))
 
                 contact_html_list = dataset_html.xpath(
                     './/div[@class="tx_icsopendatastore_pi1_contact separator"]/p[@class="value description"]')
@@ -190,8 +194,17 @@ def main():
                 creator_str = creator_html_list[0].text.strip() or None if creator_html_list else None
 
                 owner_html_list = dataset_html.xpath(
-                    './/div[@class="tx_icsopendatastore_pi1_owner separator"]/p[@class="value description"]')
+                    './/div[@class="tx_icsopendatastore_pi1_owner separator"]/p[@class="value owner"]')
                 owner_str = owner_html_list[0].text.strip() or None if owner_html_list else None
+                organization_title, author = conv.check(conv.pipe(
+                    conv.test_in(organization_titles_by_owner_str),
+                    conv.translate(organization_titles_by_owner_str),
+                    conv.default((u"Rennes Métropole", None)),
+                    ))(owner_str, state = conv.default_state)
+                if not args.dry_run:
+                    organization = harvester.upsert_organization(dict(
+                        title = organization_title,
+                        ))
 
                 categories_html_list = dataset_html.xpath(
                     './/div[@class="tx_icsopendatastore_pi1_categories separator"]/p[@class="value description"]')
@@ -227,6 +240,15 @@ def main():
                     conv.date_to_iso8601_str,
                     ))(update_date_str, state = conv.default_state)
 
+                frequency_html_list = dataset_html.xpath(
+                    './/div[@class="tx_icsopendatastore_pi1_updatefrequency separator"]/p[@class="value description"]')
+                frequency_str = frequency_html_list[0].text if frequency_html_list else None
+                frequency = conv.check(conv.pipe(
+                    conv.cleanup_line,
+                    conv.test_in(frequency_translations),
+                    conv.translate(frequency_translations),
+                    ))(frequency_str, state = conv.default_state)
+
                 description_html_list = dataset_html.xpath(
                     './/div[@class="tx_icsopendatastore_pi1_description separator"]/p[@class="value description"]')
                 description_str = description_html_list[0].text.strip() or None if description_html_list else None
@@ -249,11 +271,14 @@ def main():
                 resources = []
                 for resource_html in dataset_html.xpath('.//div[@class="tx_icsopendatastore_pi1_file"]'):
                     resource_url = urlparse.urljoin(base_url, resource_html.xpath('.//a[@href]')[0].get('href'))
+                    resource_path = urlparse.urlsplit(resource_url)
+                    filename = resource_url.rstrip('/').rsplit(u'/', 1)[-1] or u'Fichier'
+                    if not filename or fi
                     resources.append(dict(
                         created = release_date_iso8601_str,
                         format = resource_html.xpath('.//span[@class="coin"]')[0].text.strip() or None,
                         last_modified = update_date_iso8601_str,
-                        name = resource_url.rsplit(u'/', 1)[-1],
+                        name = filename,
                         url = resource_url,
                         ))
             except:
@@ -262,6 +287,7 @@ def main():
 
         package = dict(
             author = author,
+            frequency = frequency,
             license_id = license_id,
             maintainer = contact_str,
             notes = description_str,
@@ -269,12 +295,12 @@ def main():
             tags = tags,
             territorial_coverage = u'IntercommunalityOfFrance/243500139/CA RENNES METROPOLE',
             title = title_str,
-            url = u'http://www.data.rennes-metropole.fr/les-donnees/catalogue/?tx_icsopendatastore_pi1[uid]={}' \
+            url = u'http://www.data.rennes-metropole.fr/les-donnees/catalogue/?tx_icsopendatastore_pi1[uid]={}'
                 .format(data_number),
             )
         helpers.set_extra(package, u'Données techniques', technical_data_str)
+        helpers.set_extra(package, u'Éditeur', publisher_str)
         helpers.set_extra(package, u'Auteur', creator_str)
-        helpers.set_extra(package, u'Propriétaire', owner_str)
 
         if not args.dry_run:
             harvester.add_package(package, organization, package['title'], package['url'], groups = groups)

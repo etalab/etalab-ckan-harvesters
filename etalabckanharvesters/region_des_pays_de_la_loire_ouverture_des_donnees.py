@@ -36,7 +36,6 @@ import ConfigParser
 import datetime
 import itertools
 import logging
-import lxml
 import os
 import re
 import sys
@@ -55,7 +54,7 @@ frequency_by_temporal = {
     u'actualisation-prevue-en-2015': u'ponctuelle',
     u'annuel': u'annuelle',
     u'annuelle': u'annuelle',
-    u'annuelle-hors-ter-mensuelle-ter': u'annuelle', # ???
+    u'annuelle-hors-ter-mensuelle-ter': u'annuelle',  # ???
     u'aucune': u'aucune',
     u'bi-annuelle': u'semestrielle',
     u'hebdomadaire': u'hebdomadaire',
@@ -484,7 +483,7 @@ def main():
                 dict(
                     created = entry['dct:issued'],
                     format = distribution['dct:format'],
-                    last_modified = entry['dct:issued'],
+                    last_modified = entry['dct:modified'],
                     name = u'{}.{}'.format(entry['dct:identifier'], distribution['dct:format']),
                     url = distribution[u'dcat:accessURL'],
                     )
