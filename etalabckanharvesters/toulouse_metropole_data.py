@@ -78,6 +78,10 @@ organization_title_translations = {
 #    u"Tisseo SMTC",
 #    u"Toulouse métrople",
     }
+organizations_title_to_ignore = set([
+    u"JC Decaux",
+    u"La Poste",
+    ])
 territory_error_couple_by_name = {}
 
 
@@ -394,6 +398,9 @@ def main():
         dataset = conv.check(entry_to_dataset)(dict(zip(labels, row)), state = conv.default_state)
 
         creators.add(dataset['dct:creator'])
+
+        if dataset[u'dct:creator'] in organizations_title_to_ignore:
+            continue
 
         if dataset[u'dcat:distribution'] == u'zip':
             resource = dict(
