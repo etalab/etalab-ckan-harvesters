@@ -148,16 +148,16 @@ class Harvester(object):
 
     def retrieve_supplier_existing_packages(self, supplier):
         for package in (supplier.get('packages') or []):
-            if not 'name' in package or not package['name'].startswith('jeux-de-donnees-'):
-                continue
             request = urllib2.Request(urlparse.urljoin(self.target_site_url,
-                'api/3/action/package_show?id={}'.format(package['name'])), headers = self.target_headers)
+                'api/3/action/package_show?id={}'.format(package['id'])), headers = self.target_headers)
             response = urllib2.urlopen(request)
             response_dict = json.loads(response.read())
             package = conv.check(
                 conv.make_ckan_json_to_package(drop_none_values = True),
                 )(response_dict['result'], state = conv.default_state)
             if package is None:
+                continue
+            if not package['name'].startswith('jeux-de-donnees-'):
                 continue
             for tag in (package.get('tags') or []):
                 if tag['name'] == 'liste-de-jeux-de-donnees':
