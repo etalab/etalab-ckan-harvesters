@@ -33,7 +33,6 @@ https://fichiers-publics.agriculture.gouv.fr/
 import argparse
 import collections
 import ConfigParser
-import datetime
 import itertools
 import logging
 import os
@@ -42,7 +41,7 @@ import sys
 import urllib2
 import urlparse
 
-from biryani1 import baseconv, custom_conv, datetimeconv, jsonconv, states
+from biryani1 import baseconv, custom_conv, states
 from lxml import etree
 import lxml.html
 
@@ -50,7 +49,7 @@ from . import helpers
 
 
 app_name = os.path.splitext(os.path.basename(__file__))[0]
-conv = custom_conv(baseconv, datetimeconv, jsonconv, states)
+conv = custom_conv(baseconv, states)
 granularity_translations = {
     u'France': u'pays',
     }
@@ -449,65 +448,6 @@ def main():
         harvester.update_target()
 
     return 0
-
-
-def make_input_to_response_data(request_url):
-    return conv.pipe(
-        conv.make_input_to_json(),
-        conv.test_isinstance(dict),
-        conv.struct(
-            dict(
-                opendata = conv.pipe(
-                    conv.test_isinstance(dict),
-                    conv.struct(
-                        dict(
-                            answer = conv.pipe(
-                                conv.test_isinstance(dict),
-                                conv.struct(
-                                    dict(
-                                        data = conv.pipe(
-                                            conv.test_isinstance(dict),
-                                            conv.not_none,
-                                            ),
-                                        status = conv.pipe(
-                                            conv.test_isinstance(dict),
-                                            conv.struct(
-                                                {
-                                                    u'@attributes': conv.pipe(
-                                                        conv.test_isinstance(dict),
-                                                        conv.struct(
-                                                            dict(
-                                                                code = conv.pipe(
-                                                                    conv.test_equals('0'),
-                                                                    conv.not_none,
-                                                                    ),
-                                                                message = conv.pipe(
-                                                                    conv.test_equals('OK'),
-                                                                    conv.not_none,
-                                                                    ),
-                                                                ),
-                                                            ),
-                                                        ),
-                                                    },
-                                                ),
-                                            ),
-                                        ),
-                                    ),
-                                conv.not_none,
-                                ),
-                            request = conv.pipe(
-                                conv.test_isinstance(basestring),
-                                conv.test_equals(request_url),
-                                conv.not_none,
-                                ),
-                            ),
-                        ),
-                    conv.not_none,
-                    ),
-                ),
-            ),
-        conv.function(lambda value: value['opendata']['answer']['data']),
-        )
 
 
 if __name__ == '__main__':
