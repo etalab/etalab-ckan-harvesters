@@ -24,7 +24,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-"""Download HTML pages from Oise Open Data repository http://od.oise-preprod.oxyd.net/"""
+"""Download HTML pages from Oise Open Data repository http://opendata.oise.fr/"""
 
 
 import argparse
@@ -88,7 +88,7 @@ def main():
 
     global remaining_links
     remaining_links = set([
-        (u'http://od.oise-preprod.oxyd.net/index.php?id=38', 'search'),
+        (u'http://opendata.oise.fr/index.php?id=38', 'search'),
         ])
     visited_search_indexes.add(0)
 

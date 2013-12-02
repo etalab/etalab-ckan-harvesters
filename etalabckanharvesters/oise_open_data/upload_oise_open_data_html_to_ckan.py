@@ -47,14 +47,19 @@ french_date_re = re.compile(ur'(?P<day>0?[1-9]|[12]\d|3[01]) (?P<month>.+) (?P<y
 format_by_image_name = {
     u'doc.png': u'DOC',
     u'pdf.png': u'PDF',
+    u'xls.png': u'XLS',
     u'xlsx.png': u'XLS',
     }
 frequency_translations = {
+#    u"A chaque campagne de comptage": None,
     u"Annuelle": u'annuelle',
-    u"Chaque BP": None,
-    u"chaque BP": None,
-    u"Chaque DM1": None,
-    u"Chaque DM2": None,
+    u"annuelle": u'annuelle',
+#    u"Chaque BP": None,
+#    u"chaque BP": None,
+#    u"Chaque BP, DM, CA": None,
+#    u"Chaque DM1": None,
+#    u"Chaque DM2": None,
+#    u"Suivant classement/déclassement et nouvelles voies": None,
     u"Trimestrielle": u'trimestrielle',
     }
 html_parser = etree.HTMLParser()
@@ -65,6 +70,8 @@ log = logging.getLogger(app_name)
 name_re = re.compile(u'(\{(?P<url>.+)\})?(?P<name>.+)$')
 territorial_coverage_translations = {
     u"Département de l'Oise": u'DepartmentOfFrance/60/60 OISE',
+    u"Territoire de Clermont": u"CommuneOfFrance/60157/60600 CLERMONT",
+    u"Territoire de Creil": u"CommuneOfFrance/60175/60100 CREIL",
     }
 trimester_re = re.compile(ur'T(?P<trimester>[1-4]) (?P<year>\d{4})$')
 year_re = re.compile(ur'Année (?P<year>\d{4})$')
@@ -79,6 +86,12 @@ def convert_xml_element_to_python(value):
         )
     children = list(value)
     if children:
+        if value.text is not None and value.text.strip():
+            assert '^text' not in element  # TODO
+            element['^text'] = value.text
+        if value.tail is not None and value.tail.strip():
+            assert '^tail' not in element  # TODO
+            element['^tail'] = value.tail
         for child in children:
             if child.tag in (etree.Comment, etree.PI):
                 continue
@@ -95,16 +108,16 @@ def convert_xml_element_to_python(value):
             else:
                 element[child_tag] = convert_xml_element_to_python(child)
     elif value.text is not None and value.text.strip() and value.tail is not None and value.tail.strip():
-        assert 'text' not in element  # TODO
+        assert '^text' not in element  # TODO
         element['^text'] = value.text
-        assert 'tail' not in element  # TODO
+        assert '^tail' not in element  # TODO
         element['^tail'] = value.tail
     elif element:
         if value.text is not None and value.text.strip():
-            assert 'text' not in element  # TODO
+            assert '^text' not in element  # TODO
             element['^text'] = value.text
         if value.tail is not None and value.tail.strip():
-            assert 'tail' not in element  # TODO
+            assert '^tail' not in element  # TODO
             element['^tail'] = value.tail
     elif value.text is not None and value.text.strip():
         element = value.text
@@ -130,14 +143,26 @@ def convert_xml_name_to_python(nsmap, value):
     return value
 
 
-element_to_str = conv.pipe(
+element_to_lines = conv.pipe(
     conv.test_isinstance(dict),
-    conv.test(lambda element: len(element) == 2 and set(element.keys()) == set(['@class', '^text'])),
-    conv.function(lambda element: element['^text']),
+    conv.test(lambda element: all(
+        key in ['@class', '^text', 'br']
+        for key in element.keys()
+        )),
+    conv.function(lambda element: [
+        line
+        for line in itertools.chain(
+            [element['^text']],
+            element['br'] if isinstance(element.get('br'), list) else [element.get('br')],
+            )
+        ]),
     )
 
 
-element_to_text = conv.pipe(
+element_to_str = conv.pipe(
+    conv.test_isinstance(dict),
+    conv.test(lambda element: set(element.keys()) == set(['@class', '^text'])),
+    conv.function(lambda element: element['^text']),
     )
 
 
@@ -179,7 +204,9 @@ def main():
     args = parser.parse_args()
     logging.basicConfig(level = logging.DEBUG if args.verbose else logging.WARNING, stream = sys.stdout)
 
-    config_parser = ConfigParser.SafeConfigParser(dict(here = os.path.dirname(args.config)))
+    config_parser = ConfigParser.SafeConfigParser(dict(
+        here = os.path.dirname(os.path.abspath(os.path.normpath(args.config))),
+        ))
     config_parser.read(args.config)
     conf = conv.check(conv.pipe(
         conv.test_isinstance(dict),
@@ -272,7 +299,6 @@ def main():
                             element_to_str,
                             french_input_to_date,
                             conv.date_to_iso8601_str,
-                            conv.not_none,
                             ),
                         u'Date de mise à jour': conv.pipe(
                             element_to_str,
@@ -300,7 +326,7 @@ def main():
                         u'Fréquence de mise à jour': conv.pipe(
                             element_to_str,
                             conv.cleanup_line,
-                            conv.test_in(frequency_translations),
+                            # conv.test_in(frequency_translations),
                             ),
                         u'Identifiant': conv.pipe(
                             element_to_str,
@@ -322,7 +348,6 @@ def main():
                                                             u'@alt': conv.pipe(
                                                                 conv.cleanup_line,
                                                                 conv.test_in(license_id_by_name),
-                                                                conv.not_none,
                                                                 ),
                                                             },
                                                         default = conv.noop,
@@ -337,7 +362,6 @@ def main():
                                 default = conv.noop,
                                 ),
                             conv.function(lambda element: element['a']['img']['@alt']),
-                            conv.not_none,
                             ),
                         u'Mots clés': conv.pipe(
                             element_to_str,
@@ -358,10 +382,16 @@ def main():
 #                                u"15-12-2012",
 #                                ]),
                             ),
-                        u'Prérimètre géographique': conv.pipe(
-                            element_to_str,
-                            conv.cleanup_line,
-                            conv.test_in(territorial_coverage_translations),
+                        u'Périmètre géographique': conv.pipe(
+                            element_to_lines,
+                            conv.uniform_sequence(
+                                conv.pipe(
+                                    conv.cleanup_line,
+                                    conv.test_in(territorial_coverage_translations),
+                                    ),
+                                drop_none_items = True,
+                                ),
+                            conv.empty_to_none,
                             conv.not_none,
                             ),
                         u'Propriétaire': conv.pipe(
@@ -379,8 +409,6 @@ def main():
                                 conv.cleanup_line,
                                 drop_none_items = True,
                                 ),
-                            conv.empty_to_none,
-                            conv.not_none,
                             ),
                         },
                     ))(fields, state = conv.default_state)
@@ -404,16 +432,19 @@ def main():
 
         package = dict(
             frequency = frequency_translations.get(entry[u'Fréquence de mise à jour']),
-            license_id = license_id_by_name[entry[u'Licence']],
+            license_id = license_id_by_name.get(entry[u'Licence']),
             notes = entry[u'Description'],
             resources = resources,
             tags = [
                 dict(name = tag_name)
                 for tag_name in sorted(set(entry[u'Mots clés'] or []))
                 ],
-            territorial_coverage = territorial_coverage_translations[entry[u'Prérimètre géographique']],
+            territorial_coverage = u','.join(
+                territorial_coverage_translations[line]
+                for line in entry[u'Périmètre géographique']
+                ),
             title = title_str,
-            url = u'http://od.oise-preprod.oxyd.net/index.php?id=38&tx_icsoddatastore_pi1[uid]={}'
+            url = u'http://opendata.oise.fr/index.php?id=38&tx_icsoddatastore_pi1[uid]={}'
                 u'&tx_icsoddatastore_pi1[returnID]=38'.format(data_number),
             )
 
@@ -422,7 +453,7 @@ def main():
                 harvester.upsert_group(dict(
                     title = theme,
                     ))
-                for theme in entry[u'Thématiques']
+                for theme in sorted(set([u"Territoires"] + (entry[u'Thématiques'] or [])))
                 ]
             organization = harvester.upsert_organization(dict(
                 title = entry[u'Propriétaire'],
