@@ -103,7 +103,9 @@ def main():
     args = parser.parse_args()
     logging.basicConfig(level = logging.DEBUG if args.verbose else logging.WARNING, stream = sys.stdout)
 
-    config_parser = ConfigParser.SafeConfigParser(dict(here = os.path.dirname(args.config)))
+    config_parser = ConfigParser.SafeConfigParser(dict(
+        here = os.path.dirname(os.path.abspath(os.path.normpath(args.config))),
+        ))
     config_parser.read(args.config)
     conf = conv.check(conv.pipe(
         conv.test_isinstance(dict),
