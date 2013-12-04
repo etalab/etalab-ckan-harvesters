@@ -50,9 +50,20 @@ app_name = os.path.splitext(os.path.basename(__file__))[0]
 conv = custom_conv(baseconv, datetimeconv, states)
 french_date_re = re.compile(ur'(?P<day>0?[1-9]|[12]?\d|3[01])/(?P<month>0?[1-9]|1[0-2])/(?P<year>[12]\d\d\d)')
 html_parser = etree.HTMLParser()
+license_id_by_title = {
+    u'Licence CC-BY 3.0': u'cc-by',
+    u'Licence CC-BY-SA 2.0': u'cc-by-sa',
+    u"Licence Nice Côte d'Azur": u'other-open',
+    u'Licence Open Data SNCF': u'other-open',
+    u'Licence Ouverte': u'fr-lo',
+    u'Licence ODBL': u'odc-odbl',
+    }
 log = logging.getLogger(app_name)
 N_ = lambda message: message
 name_re = re.compile(u'(\{(?P<url>.+)\})?(?P<name>.+)$')
+organization_title_translations = {
+    u'OpenStreetMap et contributeurs': u'OpenStreetMap',
+    }
 
 
 def french_input_to_date(value, state = None):
@@ -67,6 +78,8 @@ def french_input_to_date(value, state = None):
 def main():
     parser = argparse.ArgumentParser(description = __doc__)
     parser.add_argument('config', help = 'path of configuration file')
+    parser.add_argument('-d', '--dry-run', action = 'store_true',
+        help = "simulate harvesting, don't update CKAN repository")
     parser.add_argument('-v', '--verbose', action = 'store_true', help = 'increase output verbosity')
 
     global args
@@ -114,11 +127,43 @@ def main():
         }
     source_site_url = u'http://opendata.regionpaca.fr/'
 
-    harvester.retrieve_target()
+    if not args.dry_run:
+        harvester.retrieve_target()
+
+    log.info(u'Retrieving list of source partners')
+    partner_by_title = {}
+    for url_path in (
+            'partenaires.html',
+            'partenaires/page/2.html',
+            ):
+        request = urllib2.Request(urlparse.urljoin(source_site_url, url_path), headers = source_headers)
+        response = urllib2.urlopen(request)
+        partners_html = etree.fromstring(response.read(), html_parser)
+        for partner_content_html in partners_html.xpath(u'.//div[@class="partner_content"]'):
+            partner_image_url_path = partner_content_html.find(u'.//div[@class="partner_image"]/img').get('src')
+            assert partner_image_url_path is not None
+            partner_text_html = partner_content_html.find(u'.//div[@class="partner_text"]')
+            partner_title = partner_text_html.findtext('h2/a').strip() or None
+            assert partner_title is not None
+            partner_description_html = partner_text_html.find('p')
+            if partner_description_html is None:
+                assert len(partner_text_html) == 2
+                comment_html = partner_text_html[1]
+                assert comment_html.tag is etree.Comment
+                partner_description = comment_html.tail.strip() or None
+                assert partner_description is not None
+            else:
+                partner_description = etree.tostring(partner_description_html, encoding = 'utf-8',
+                    method = 'text').strip() or None
+            partner_by_title[partner_title] = dict(
+                description = partner_description,
+                title = partner_title,
+                image_url = urlparse.urljoin(source_site_url, partner_image_url_path),
+                )
 
     # Retrieve short infos of packages in source.
     log.info(u'Retrieving list of source datasets')
-    request = urllib2.Request(urlparse.urljoin(source_site_url, '/donnees.html?type=110&no_cache=1'
+    request = urllib2.Request(urlparse.urljoin(source_site_url, 'donnees.html?type=110&no_cache=1'
         '&tx_ausyopendata_pi1%5Bfile%5D=fileadmin%2F_temp_%2Fcatalog.csv'
         '&tx_ausyopendata_pi1%5Baction%5D=export&tx_ausyopendata_pi1%5Bcontroller%5D=Dataset'
         '&cHash=50af02984e8949aa84fa1d9f2acdc4ba'), headers = source_headers)
@@ -152,13 +197,7 @@ def main():
                     ),
                 u"Conditions d'utilisation": conv.pipe(
                     conv.cleanup_line,
-                    conv.test_in([
-                        u'Licence CC-BY 3.0',
-                        u"Licence Nice Côte d'Azur",
-                        u'Licence ODBL',
-                        u'Licence Open Data SNCF',
-                        u'Licence Ouverte',
-                        ]),
+                    conv.test_in(license_id_by_title),
                     conv.not_none,
                     ),
                 u'Couverture géographique': conv.pipe(
@@ -286,6 +325,8 @@ def main():
 
         associated_documents = [
             dict(
+                created = record[u'Date de création de la donnée'],
+                last_modified = record[u'Date de dernière mise à jour publiée'],
                 name = unicode(a_html.text),
                 url = urlparse.urljoin(base_url, unicode(a_html.get('href'))),
                 )
@@ -294,6 +335,8 @@ def main():
 
         external_links = [
             dict(
+                created = record[u'Date de création de la donnée'],
+                last_modified = record[u'Date de dernière mise à jour publiée'],
                 name = unicode(a_html.text),
                 url = unicode(a_html.get('href')),
                 )
@@ -302,6 +345,8 @@ def main():
 
         download_links = [
             dict(
+                created = record[u'Date de création de la donnée'],
+                last_modified = record[u'Date de dernière mise à jour publiée'],
                 format = unicode(img_html.get('src')).rsplit(u'.', 1)[0].rsplit(u'-', 1)[-1],
                 name = unicode(img_html.get('title')),
                 url = urlparse.urljoin(base_url, unicode(a_html.get('href'))),
@@ -312,9 +357,11 @@ def main():
         if not download_links:
             download_links = [
                 dict(
+                    created = record[u'Date de création de la donnée'],
                     description = u'Page web proposant de télécharger les données aux formats {}'.format(
                         u', '.join(record['Formats'])),
                     format = 'HTML',
+                    last_modified = record[u'Date de dernière mise à jour publiée'],
                     name = a_html.text.strip(),
                     url = urlparse.urljoin(base_url, unicode(a_html.get('href'))),
                     )
@@ -336,26 +383,28 @@ def main():
                         url = urlparse.urljoin(base_url, unicode(a_html.get('href'))),
                         ))
 
-        groups = [
-            harvester.upsert_group(dict(
-                title = {
-                    # "Marseille-Provence 2013" is also an organization. And CKAN doesn't allow a group and an
-                    # organization to share the same name.
-                    u'Marseille-Provence 2013': u'Marseille-Provence 2013 - Capitale européenne de la culture',
-                    }.get(category, category),
-                ))
-            for category in record[u'Catégories']
-            ]
-        license_id = {
-            u'Licence CC-BY 3.0': u'cc-by',
-            u"Licence Nice Côte d'Azur": u'other-open',
-            u'Licence Open Data SNCF': u'other-open',
-            u'Licence Ouverte': u'fr-lo',
-            u'Licence ODBL': u'odc-odbl',
-            }[record[u"Conditions d'utilisation"]]
-        organization = harvester.upsert_organization(dict(
-            title = record[u'Producteur'],
-            ))
+        if not args.dry_run:
+            groups = [
+                harvester.upsert_group(dict(
+                    title = {
+                        # "Marseille-Provence 2013" is also an organization. And CKAN doesn't allow a group and an
+                        # organization to share the same name.
+                        u'Marseille-Provence 2013': u'Marseille-Provence 2013 - Capitale européenne de la culture',
+                        }.get(category, category),
+                    ))
+                for category in sorted(set(record[u'Catégories'] + [u"Territoires"]))
+                ]
+        license_id = license_id_by_title[record[u"Conditions d'utilisation"]]
+# Code commented out to ensure that existing logo and description will not be overridden.
+#        partner = partner_by_title.get(organization_title_translations.get(record[u'Producteur'],
+#            record[u'Producteur']))
+#        if partner is None:
+#            partner = dict(title = organization_title_translations.get(record[u'Producteur'],
+#                record[u'Producteur']))
+        partner = dict(title = organization_title_translations.get(record[u'Producteur'],
+            record[u'Producteur']))
+        if not args.dry_run:
+            organization = harvester.upsert_organization(partner)
         territorial_coverage = {
             u'Européenne': u'InternationalOrganization/UE/UNION EUROPEENNE',
             u'Internationale': u'InternationalOrganization/WW/MONDE',
@@ -399,14 +448,13 @@ def main():
         if record[u"Langues"] != [u'Français']:
             helpers.set_extra(package, u'Langues', u', '.join(record[u"Langues"]))
         helpers.set_extra(package, u'Propriétaire', record[u"Propriétaire"])
-        helpers.set_extra(package, u'Date de création de la donnée', record[u'Date de création de la donnée'])
-        helpers.set_extra(package, u'Date de dernière mise à jour publiée',
-            record[u'Date de dernière mise à jour publiée'])
 
-        harvester.add_package(package, organization, record[u'URL'].rsplit(u'/', 1)[-1].split(u'.', 1)[0],
-            record[u'URL'], groups = groups, related = applications)
+        if not args.dry_run:
+            harvester.add_package(package, organization, record[u'URL'].rsplit(u'/', 1)[-1].split(u'.', 1)[0],
+                record[u'URL'], groups = groups, related = applications)
 
-    harvester.update_target()
+    if not args.dry_run:
+        harvester.update_target()
 
     return 0
 
