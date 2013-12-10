@@ -26,6 +26,7 @@
 
 """Harvest Lutèce from City of Paris
 
+http://opendata.paris.fr/opendata/rest/ckan/...
 http://dev.lutece.paris.fr/plugins/module-document-ckan/
 """
 
@@ -40,7 +41,7 @@ import sys
 import urllib2
 import urlparse
 
-from biryani1 import baseconv, custom_conv, states
+from biryani1 import baseconv, custom_conv, states, strings
 from ckantoolbox import ckanconv
 
 from . import helpers
@@ -175,6 +176,8 @@ def before_ckan_json_to_package(package, state = None):
 def main():
     parser = argparse.ArgumentParser(description = __doc__)
     parser.add_argument('config', help = 'path of configuration file')
+    parser.add_argument('-d', '--dry-run', action = 'store_true',
+        help = "simulate harvesting, don't update CKAN repository")
     parser.add_argument('-v', '--verbose', action = 'store_true', help = 'increase output verbosity')
 
     global args
@@ -220,9 +223,10 @@ def main():
     source_headers = {
         'User-Agent': conf['user_agent'],
         }
-    source_site_url = u'http://dev.lutece.paris.fr/incubator/rest/ckan/'
+    source_site_url = u'http://opendata.paris.fr/opendata/rest/ckan/'
 
-    harvester.retrieve_target()
+    if not args.dry_run:
+        harvester.retrieve_target()
 
     # Retrieve names of packages in source.
     request = urllib2.Request(urlparse.urljoin(source_site_url, 'api/3/action/package_list'), headers = source_headers)
@@ -237,32 +241,80 @@ def main():
     for package_source_name in packages_source_name:
         request = urllib2.Request(urlparse.urljoin(source_site_url, u'api/3/action/package_show?id={}'.format(
             package_source_name)).encode('utf-8'), headers = source_headers)
-        response = urllib2.urlopen(request)
+        try:
+            response = urllib2.urlopen(request)
+        except urllib2.HTTPError, response:
+            if response.code == 404:
+                log.warning(u'Skipping package {}, because page not found'.format(package_source_name))
+                continue
+            raise
         response_dict = json.loads(response.read())
-        package = conv.check(conv.pipe(
+        if not response_dict['success']:
+            log.warning(u'Skipping package {}, because {}'.format(package_source_name, response_dict))
+            continue
+        source_package = conv.check(conv.pipe(
             before_ckan_json_to_package,
             conv.make_ckan_json_to_package(drop_none_values = True),
             conv.not_none,
             after_ckan_json_to_package,
             ))(response_dict['result'], state = conv.default_state)
-        if package is None:
+        if source_package is None:
             continue
-        package_groups = package.pop('groups', None)
-        tags = [
-            dict(
-                name = group['name'],
-                )
-            for group in (package_groups or [])
-            ]
-        if tags:
-            package.setdefault('tags', []).extend(tags)
-        source_url = u'URL TODO'
-        helpers.set_extra(package, u'Source', source_url)
+
+        package = dict(
+#            frequency = source_package.get('frequency'),
+            license_id = {
+                u'ODbL': u'odc-odbl',
+                }[source_package.get('license_id')],
+            notes = source_package.get('notes'),
+            title = source_package['title'],
+            resources = [
+                dict(
+                    created = resource['created'],
+                    format = resource.get('format'),
+                    last_modified = resource.get('last_modified'),
+                    name = resource.get('name') or u'Fichier.{}'.format(resource.get('format')).strip(u'.'),
+                    url = resource['url'],
+                    )
+                for resource in (source_package.get('resources') or [])
+                if resource.get('url') is not None
+                ],
+            tags = [
+                dict(name = tag_name)
+                for tag_name in sorted(set(
+                    strings.slugify(tag['name'])
+                    for tag in (source_package.get('tags') or [])
+                    ))
+                if tag_name and len(tag_name) > 2
+                ],
+#            temporal_coverage_from = source_package.get('temporal_coverage_from'),
+#            temporal_coverage_to = source_package.get('temporal_coverage_to'),
+            territorial_coverage = u'CommuneOfFrance/75056/75000 PARIS',
+            url = source_package['url'],
+            )
+
+        if not args.dry_run:
+            groups = source_package.get('groups')
+            if groups is not None:
+                groups = [
+                    harvester.upsert_group(dict(
+                        # Don't reuse image and description of groups, because Etalab has its own.
+                        # description = group.get(u'description'),
+                        # image_url = group.get(u'image_url'),
+                        title = group_title,
+                        ))
+                    for group_title in sorted(list(set(
+                        group['title']
+                        for group in (groups or [])
+                        )) + [u"Territoires"])
+                    ]
 
         log.info(u'Harvested package: {}'.format(package['title']))
-        harvester.add_package(package, harvester.supplier, package.pop('name'), source_url)
+        if not args.dry_run:
+            harvester.add_package(package, harvester.supplier, source_package['name'], package['url'], groups = groups)
 
-    harvester.update_target()
+    if not args.dry_run:
+        harvester.update_target()
 
     return 0
 
