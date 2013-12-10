@@ -410,6 +410,7 @@ def main():
             resources = [
                 dict(
                     # created =
+                    description = resource[u'description'],
                     format = resource[u'format'],
                     # last_modified =
                     name = resource[u'name'],
