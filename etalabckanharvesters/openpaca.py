@@ -311,6 +311,7 @@ def main():
     for record in records:
         if strings.slugify(record[u'Producteur']) in (
                 u'atout-france',  # direct data.gouv.fr subscriber
+                u'bouches-du-rhone-tourisme',  # direct data.gouv.fr subscriber
                 u'etat',
                 u'ign',  # direct data.gouv.fr subscriber
                 u'reseau-ferre-de-france',  # direct data.gouv.fr subscriber
