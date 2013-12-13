@@ -24,7 +24,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-"""Harvest open data from "OpenPACA".
+"""Harvest open data from "Open PACA".
 
 http://opendata.regionpaca.fr/
 """
@@ -115,7 +115,7 @@ def main():
 
     harvester = helpers.Harvester(
         supplier_abbreviation = u'op',
-        supplier_title = u'OpenPACA',
+        supplier_title = u'Open PACA',
         target_headers = {
             'Authorization': conf['ckan.api_key'],
             'User-Agent': conf['user_agent'],
