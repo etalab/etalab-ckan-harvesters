@@ -40,6 +40,18 @@ from biryani1 import baseconv, custom_conv, states, strings
 from ckantoolbox import ckanconv, filestores
 
 conv = custom_conv(baseconv, ckanconv, states)
+groups_title = [
+    u"Agriculture et Alimentation",
+    u"Culture et Alimentation",
+    u"Économie et Emploi",
+    u"Égalité Femmes-Hommes",
+    u"Éducation et Recherche",
+    u"International et Europe",
+    u"Logement, Développement durable et Énergie",
+    u"Santé et Social",
+    u"Société",
+    u"Territoires et Transports",
+    ]
 log = logging.getLogger(__name__)
 
 
