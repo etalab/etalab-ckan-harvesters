@@ -41,7 +41,7 @@ import sys
 import urllib2
 import urlparse
 
-from biryani1 import baseconv, custom_conv, states
+from biryani1 import baseconv, custom_conv, datetimeconv, states
 from lxml import etree
 import lxml.html
 
@@ -49,15 +49,18 @@ from . import helpers
 
 
 app_name = os.path.splitext(os.path.basename(__file__))[0]
-conv = custom_conv(baseconv, states)
+conv = custom_conv(baseconv, datetimeconv, states)
 granularity_translations = {
+    u'commune': u'commune',
     u'France': u'pays',
     }
 log = logging.getLogger(app_name)
 name_re = re.compile(u'(\{(?P<url>.+)\})?(?P<name>.+)$')
 organization_title_translations = {
-    u'Ministère de l’Agriculture, de l’Agroalimentaire et de la Forêt':
-        u'Ministère de l’Agriculture, de l’Agroalimentaire et de la Forêt',
+    u"Ministère de l'Agriculture, de l'Agroalimentaire et de la Forêt":
+        u"Ministère de l'Agriculture, de l'Agroalimentaire et de la Forêt",
+    u"Ministère de l’Agriculture, de l’Agroalimentaire et de la Forêt":
+        u"Ministère de l'Agriculture, de l'Agroalimentaire et de la Forêt",
     }
 territorial_coverage_translations = {
     u'Country/FR': u'Country/FR/FRANCE',
@@ -74,7 +77,6 @@ validate_xml_python = conv.pipe(
             'digest': conv.pipe(
                 conv.test_isinstance(basestring),
                 conv.cleanup_line,
-                conv.not_none,
                 ),
             'metadata': conv.pipe(
                 conv.test_isinstance(dict),
@@ -139,6 +141,9 @@ validate_xml_python = conv.pipe(
                                 conv.pipe(
                                     conv.test_isinstance(basestring),
                                     conv.cleanup_line,
+                                    conv.test_in([
+                                        u"Agriculture et Alimentation",
+                                        ]),
                                     conv.not_none,
                                     ),
                                 ),
@@ -156,8 +161,14 @@ validate_xml_python = conv.pipe(
                                 ]),
                             conv.not_none,
                             ),
-                        maintainer = conv.test_none(),
-                        maintainer_email = conv.test_none(),
+                        maintainer = conv.pipe(
+                            conv.test_isinstance(basestring),
+                            conv.cleanup_line,
+                            ),
+                        maintainer_email = conv.pipe(
+                            conv.test_isinstance(basestring),
+                            conv.input_to_email,
+                            ),
                         notes = conv.pipe(
                             conv.test_isinstance(basestring),
                             conv.cleanup_text,
@@ -189,8 +200,15 @@ validate_xml_python = conv.pipe(
                                                 conv.test_in([
                                                     u"CLE",
                                                     u"CSV",
+                                                    u"PDF",
+                                                    u"TXT",
                                                     ]),
                                                 conv.not_none,
+                                                ),
+                                            last_modified = conv.pipe(
+                                                conv.test_isinstance(basestring),
+                                                conv.iso8601_input_to_date,
+                                                conv.date_to_iso8601_str,
                                                 ),
                                             name = conv.pipe(
                                                 conv.test_isinstance(basestring),
@@ -211,7 +229,10 @@ validate_xml_python = conv.pipe(
                         state = conv.test_none(),
                         supplier = conv.pipe(
                             conv.test_isinstance(basestring),
-                            conv.test_equals(u'Ministère de l’Agriculture, de l’Agroalimentaire et de la Forêt'),
+                            conv.test_in([
+                                u"Ministère de l'Agriculture, de l'Agroalimentaire et de la Forêt",
+                                u"Ministère de l’Agriculture, de l’Agroalimentaire et de la Forêt",
+                                ]),
                             conv.not_none,
                             ),
                         tags = conv.pipe(
@@ -359,7 +380,7 @@ def main():
 
     harvester = helpers.Harvester(
         supplier_abbreviation = u'agr',
-        supplier_title = u'Ministère de l’Agriculture, de l’Agroalimentaire et de la Forêt',
+        supplier_title = u"Ministère de l'Agriculture, de l'Agroalimentaire et de la Forêt",
         target_headers = {
             'Authorization': conf['ckan.api_key'],
             'User-Agent': conf['user_agent'],
@@ -375,19 +396,23 @@ def main():
         harvester.retrieve_target()
 
     # Retrieve list of packages in source.
-    log.info(u'Retrieving list of source packages')
-    request_url = urlparse.urljoin(source_site_url, u'etalab/ETALAB/Meta_donnees/')
-    request = urllib2.Request(request_url, headers = source_headers)
-    response = urllib2.urlopen(request)
-    index_tree = lxml.html.fromstring(response.read())
-    datasets_filename = [
-        a_element.get('href')
-        for a_element in index_tree.xpath('//ul/li/a')[1:]  # Skip parent directory.
-        ]
+    datasets_url = []
+    directories_url = [urlparse.urljoin(source_site_url, u'etalab/ETALAB/Meta_donnees/')]
+    while directories_url:
+        directory_url = directories_url.pop(0)
+        request = urllib2.Request(directory_url, headers = source_headers)
+        response = urllib2.urlopen(request)
+        index_tree = lxml.html.fromstring(response.read())
+        for a_element in index_tree.xpath('//ul/li/a')[1:]:  # Skip parent directory.
+            filename = a_element.get('href')
+            if filename.endswith('/'):
+                directories_url.append(urlparse.urljoin(directory_url, filename))
+            else:
+                datasets_url.append(urlparse.urljoin(directory_url, filename))
 
-    for dataset_filename in datasets_filename:
-        request_url = urlparse.urljoin(source_site_url, u'etalab/ETALAB/Meta_donnees/{}'.format(dataset_filename))
-        request = urllib2.Request(request_url, headers = source_headers)
+    for dataset_url in datasets_url:
+        log.debug('Loading dataset {}'.format(dataset_url))
+        request = urllib2.Request(dataset_url, headers = source_headers)
         response = urllib2.urlopen(request)
         dataset_tree = etree.parse(response)
         dataset_root_element = convert_xml_element_to_python(dataset_tree.getroot())
@@ -412,7 +437,7 @@ def main():
                     # created =
                     description = resource[u'description'],
                     format = resource[u'format'],
-                    # last_modified =
+                    last_modified = resource[u'last_modified'],
                     name = resource[u'name'],
                     url = resource[u'url'],
                     )
@@ -445,7 +470,7 @@ def main():
                 title = organization_title_translations.get(metadata['organization'], metadata['organization']),
                 ))
 
-            harvester.add_package(package, organization, metadata[u'id'], request_url, groups = groups)
+            harvester.add_package(package, organization, metadata[u'id'], dataset_url, groups = groups)
 
     if not args.dry_run:
         harvester.update_target()
