@@ -248,13 +248,17 @@ def main():
                         u'Aucune',
                         u'Hebdomadaire',
                         u'Mensuelle',
+                        u'Non communiquée',
                         u'Ponctuelle',
                         u'Quotidienne',
                         u'Semestrielle',
                         u'Triennale',
                         u'Trimestrielle',
                         ]),
-                    conv.not_none,
+                    conv.translate({
+                        u'Non communiquée': None,
+                        }),
+                    conv.function(lambda frequency: frequency.lower()),
                     ),
                 u'Langues': conv.pipe(
                     conv.function(lambda s: s.split(u',')),
@@ -430,7 +434,7 @@ def main():
                 (u"Ville de Marseille", u'Communale'): u'CommuneOfFrance/13055/13000 MARSEILLE',
                 }.get((record[u'Producteur'], record[u'Couverture géographique']))
         package = dict(
-            frequency = record[u'Fréquence de mises à jour'].lower(),
+            frequency = record[u'Fréquence de mises à jour'],
             license_id = license_id,
             notes = record[u'Description'],
             resources = download_links + associated_documents + external_links,
