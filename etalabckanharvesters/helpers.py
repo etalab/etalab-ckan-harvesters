@@ -379,11 +379,19 @@ class Harvester(object):
                 file_metadata = filestores.upload_file(self.target_site_url, package_name,
                     packages_file.getvalue(), self.target_headers)
 
+                if self.supplier == organization:
+                    notes = u'''\
+                        Les jeux de données collectés par data.gouv.fr sur la plateforme {}
+                        '''.strip().format(self.supplier['title'])
+                else:
+                    notes = u'''\
+                        Les jeux de données publiés par {}, collectés par data.gouv.fr sur la plateforme {}
+                        '''.strip().format(organization['title'], self.supplier['title'])
                 package = dict(
                     author = self.supplier['title'],
                     license_id = 'fr-lo',
                     name = package_name,
-                    notes = u'''Les jeux de données fournis par {} pour data.gouv.fr.'''.format(organization['title']),
+                    notes = notes,
                     owner_org = self.supplier['id'],
                     resources = [
                         dict(
