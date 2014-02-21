@@ -168,11 +168,32 @@ def main():
                 break
             else:
                 frequency = None
+        if frequency is not None:
+            assert frequency in frequency_by_code, 'Unknown frequency: {}'.format(frequency)
+            frequency = frequency_by_code[frequency]
 
         for uri in dc_record.uris:
             if uri['url'].startswith('http://opendata.data.grandlyon.com/Licence'):
                 licenses_url.add(uri['url'])
             protocols.add(uri['protocol'])
+
+        subjects = [
+            subject
+            for subject in dc_record.subjects
+            if subject != 'OpenData'
+            ]
+        groups = [
+            harvester.upsert_group(dict(
+                title = subjects[0],
+                )),
+            ] if subjects else []
+        groups.append(harvester.upsert_group(dict(
+            title = u'Territoires et Transports',
+            )))
+        tags = [
+            dict(name = strings.slugify(subject))
+            for subject in subjects
+            ]
 
         related = []
         if gmd_record is None:

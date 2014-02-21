@@ -507,7 +507,7 @@ def main():
                 harvester.upsert_group(dict(
                     title = group_title,
                     ))
-                for group_title in (entry[u'dcat:theme'] or [])
+                for group_title in sorted(set((entry[u'dcat:theme'] or []) + [u"Territoires et Transports"]))
                 ]
 
             organization = harvester.upsert_organization(dict(

@@ -315,6 +315,9 @@ def main():
             harvester.upsert_group(dict(
                 title = entry[u'category'],
                 )),
+            harvester.upsert_group(dict(
+                title = u'Territoires et Transports',
+                )),
             ]
 
         html_url = urlparse.urljoin(source_site_html_url, u'DataBrowser/{}/{}'.format(collection_name,

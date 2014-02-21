@@ -243,17 +243,20 @@ def main():
 
         if not args.dry_run:
             groups = source_package.pop('groups', None)
+            groups = [
+                harvester.upsert_group(dict(
+                    # Don't reuse image and description of groups, because Etalab has its own.
+                    # description = group.get(u'description'),
+                    # image_url = group.get(u'image_url'),
+                    title = group[u'title'],
+                    ))
+                for group in (groups or [])
+                ]
+            groups.append(harvester.upsert_group(dict(
+                title = u'Territoires et Transports',
+                )))
+
             organization = source_package.pop('organization', None)
-            if groups is not None:
-                groups = [
-                    harvester.upsert_group(dict(
-                        # Don't reuse image and description of groups, because Etalab has its own.
-                        # description = group.get(u'description'),
-                        # image_url = group.get(u'image_url'),
-                        title = group[u'title'],
-                        ))
-                    for group in groups
-                    ]
             if organization is None:
                 organization = harvester.supplier
             else:

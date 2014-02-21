@@ -589,7 +589,10 @@ def main():
             if len(themes_list) > 1:
                 helpers.set_extra(package, u'Thème', themes_list[1])
         else:
-            groups = None
+            groups = []
+        groups.append(harvester.upsert_group(dict(
+            title = u'Territoires et Transports',
+            )))
 
         log.info(u'Harvested package: {}'.format(package['title']))
         harvester.add_package(package, organization, source_package['dct:title'], source_url, groups = groups)

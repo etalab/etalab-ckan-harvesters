@@ -224,6 +224,9 @@ def main():
                         harvester.upsert_group(dict(
                             title = categories_str.split(u',')[0].strip(),
                             )),
+                        harvester.upsert_group(dict(
+                            title = u'Territoires et Transports',
+                            )),
                         ] if categories_str else None
 
                 release_date_html_list = dataset_html.xpath(

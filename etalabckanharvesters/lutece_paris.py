@@ -306,7 +306,7 @@ def main():
                     for group_title in sorted(list(set(
                         group['title']
                         for group in (groups or [])
-                        )) + [u"Territoires"])
+                        )) + [u"Territoires et Transports"])
                     ]
 
         log.info(u'Harvested package: {}'.format(package['title']))

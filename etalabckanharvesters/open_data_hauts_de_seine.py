@@ -332,6 +332,9 @@ def main():
                         ))
                     for group in groups
                     ]
+            groups.append(harvester.upsert_group(dict(
+                title = u'Territoires et Transports',
+                )))
             if organization is None:
                 organization = harvester.supplier
             else:

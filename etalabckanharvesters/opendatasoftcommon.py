@@ -154,7 +154,7 @@ def add_dataset(dataset, dry_run, granularity_translations, harvester, license_i
                 )))
         if territorial_collectivity:
             groups.append(harvester.upsert_group(dict(
-                title = u'Territoires',
+                title = u'Territoires et Transports',
                 )))
 
         harvester.add_package(package, harvester.supplier, dataset[u'datasetid'], package[u'url'], groups = groups,

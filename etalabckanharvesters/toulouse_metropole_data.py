@@ -444,6 +444,9 @@ def main():
                 harvester.upsert_group(dict(
                     title = dataset[u'dcat:theme'],
                     )),
+                harvester.upsert_group(dict(
+                    title = u'Territoires et Transports',
+                    )),
                 ]
 
             organization = harvester.upsert_organization(dict(

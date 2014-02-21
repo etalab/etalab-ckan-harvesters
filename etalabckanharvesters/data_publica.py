@@ -64,7 +64,7 @@ groups_title_translations = {
     u'Autres': None,
     u'Banque & Assurance': u'Économie & Travail',
     u'Climat & Météorologie': u'Habitat & Écologie',
-    u'Collectivités & Elections': u'Territoires',
+    u'Collectivités & Elections': u'Territoires et Transports',
     u'Commerce & Services': u'Économie & Travail',
     u'Economie & Finances': u'Économie & Travail',
     u'Education & Formation': u'Éducation & Recherche',

@@ -376,6 +376,9 @@ def main():
             harvester.upsert_group(dict(
                 title = entry[u'categories'],
                 )),
+            harvester.upsert_group(dict(
+                title = u'Territoires et Transports',
+                )),
             ]
 
         # TODO: There is currently no way to access a dataset by its own URL.
