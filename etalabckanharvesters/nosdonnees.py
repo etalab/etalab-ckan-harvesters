@@ -62,7 +62,11 @@ def after_ckan_json_to_package(package, state = None):
         for extra in package['extras']:
             value = extra.get('value')
             if value is not None:
-                value = json.loads(value)
+                try:
+                    value = json.loads(value)
+                except ValueError:
+                    # Value is not a JSON but only a string.
+                    pass
             if value in (None, ''):
                 continue
             # Add a new extra with only key and value.
