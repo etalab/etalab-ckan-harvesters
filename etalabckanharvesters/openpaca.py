@@ -313,15 +313,19 @@ def main():
 
     # Retrieve packages from source.
     for record in records:
-        if strings.slugify(record[u'Producteur']) in (
+        producer_slug = strings.slugify(record[u'Producteur'])
+        if producer_slug in (
                 u'atout-france',  # direct data.gouv.fr subscriber
+                u'bibliotheque-nationale-de-france-bnf',
                 u'bouches-du-rhone-tourisme',  # direct data.gouv.fr subscriber
                 u'etat',
                 u'ign',  # direct data.gouv.fr subscriber
-                u'openstreetmap',
+                u'openstreetmap-et-contributeurs',  # direct data.gouv.fr subscriber
                 u'reseau-ferre-de-france',  # direct data.gouv.fr subscriber
                 u'sncf',  # direct data.gouv.fr subscriber
                 ):
+            continue
+        if producer_slug.startswith(u'sncf-'):
             continue
         log.info(u'Harvesting package: {}'.format(record['Titre']))
         request = urllib2.Request(record['URL'], headers = source_headers)
