@@ -103,6 +103,8 @@ def after_ckan_json_to_package(package, state = None):
 def main():
     parser = argparse.ArgumentParser(description = __doc__)
     parser.add_argument('config', help = 'path of configuration file')
+    parser.add_argument('-d', '--dry-run', action = 'store_true',
+        help = "simulate harvesting, don't update CKAN repository")
     parser.add_argument('-v', '--verbose', action = 'store_true', help = 'increase output verbosity')
 
     global args
@@ -151,7 +153,8 @@ def main():
         }
     source_site_url = u'http://www.nosdonnees.fr/'
 
-    harvester.retrieve_target()
+    if not args.dry_run:
+        harvester.retrieve_target()
 
     # Retrieve names of packages in source.
     request = urllib2.Request(urlparse.urljoin(source_site_url, 'api/3/action/package_list'),
@@ -224,9 +227,11 @@ def main():
 
         package = conv.check(conv.ckan_input_package_to_output_package)(package, state = conv.default_state)
         log.info(u'Harvested package: {}'.format(package['title']))
-        harvester.add_package(package, harvester.supplier, source_name, source_url)
+        if not args.dry_run:
+            harvester.add_package(package, harvester.supplier, source_name, source_url)
 
-    harvester.update_target()
+    if not args.dry_run:
+        harvester.update_target()
 
     return 0
 
