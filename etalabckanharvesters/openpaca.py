@@ -398,7 +398,8 @@ def main():
                         u'Marseille-Provence 2013': u'Marseille-Provence 2013 - Capitale européenne de la culture',
                         }.get(category, category),
                     ))
-                for category in sorted(set(record[u'Catégories'] + [u"Territoires et Transports"]))
+#                for category in sorted(set(record[u'Catégories'] + [u"Territoires et Transports"]))
+                for category in [u"Territoires et Transports"]
                 ]
         license_id = license_id_by_title[record[u"Conditions d'utilisation"]]
 # Code commented out to ensure that existing logo and description will not be overridden.
