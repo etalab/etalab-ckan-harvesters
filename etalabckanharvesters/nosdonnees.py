@@ -94,6 +94,8 @@ def after_ckan_json_to_package(package, state = None):
             resource.pop('URI', None)
             resources.append(resource)
         package['resources'] = resources
+    if not package.get('resources'):
+        return None, None
 
     return package, None
 
