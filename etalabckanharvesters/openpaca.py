@@ -318,6 +318,7 @@ def main():
                 u'bouches-du-rhone-tourisme',  # direct data.gouv.fr subscriber
                 u'etat',
                 u'ign',  # direct data.gouv.fr subscriber
+                u'openstreetmap',
                 u'reseau-ferre-de-france',  # direct data.gouv.fr subscriber
                 u'sncf',  # direct data.gouv.fr subscriber
                 ):
