@@ -187,6 +187,7 @@ validate_xml_python = conv.pipe(
                     conv.pipe(
                         xml_python_to_french_text,
                         conv.not_none,
+#                        conv.test_in(helpers.groups_title)
                         ),
                     ),
                 ),
@@ -256,6 +257,7 @@ validate_xml_python = conv.pipe(
                                     u'dct:title': conv.pipe(
                                         conv.test_isinstance(basestring),
                                         conv.test_in([
+                                            u'Agence Nationale des Fréquences (ANFR)',
                                             u"AIR LR",
                                             u"ASF",
                                             u"CCI Territoire de Montpellier",
@@ -418,6 +420,8 @@ def convert_xml_name_to_python(nsmap, value):
 def main():
     parser = argparse.ArgumentParser(description = __doc__)
     parser.add_argument('config', help = 'path of configuration file')
+    parser.add_argument('-d', '--dry-run', action = 'store_true',
+        help = "simulate harvesting, don't update CKAN repository")
     parser.add_argument('-v', '--verbose', action = 'store_true', help = 'increase output verbosity')
 
     global args
@@ -466,7 +470,8 @@ def main():
         }
     source_site_url = u'http://opendata.montpelliernumerique.fr/'
 
-    harvester.retrieve_target()
+    if not args.dry_run:
+        harvester.retrieve_target()
 
     # Retrieve short infos of packages in source.
     log.info(u'Retrieving list of source datasets')
@@ -581,13 +586,16 @@ def main():
         helpers.set_extra(package, u'Référence', source_package[u'dct:references'])
 
         if themes_list:
-            groups = [
-                harvester.upsert_group(dict(
-                    title = themes_list[0],
-                    )),
-                ]
-            if len(themes_list) > 1:
-                helpers.set_extra(package, u'Thème', themes_list[1])
+            if themes_list[0] in helpers.groups_title:
+                groups = [
+                    harvester.upsert_group(dict(
+                        title = themes_list[0],
+                        )),
+                    ]
+            else:
+                groups = []
+#            if len(themes_list) > 1:
+#                helpers.set_extra(package, u'Thème', themes_list[1])
         else:
             groups = []
         groups.append(harvester.upsert_group(dict(
@@ -595,9 +603,11 @@ def main():
             )))
 
         log.info(u'Harvested package: {}'.format(package['title']))
-        harvester.add_package(package, organization, source_package['dct:title'], source_url, groups = groups)
+        if not args.dry_run:
+            harvester.add_package(package, organization, source_package['dct:title'], source_url, groups = groups)
 
-    harvester.update_target()
+    if not args.dry_run:
+        harvester.update_target()
 
     return 0
 
