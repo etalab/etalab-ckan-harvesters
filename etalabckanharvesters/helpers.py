@@ -42,7 +42,7 @@ from ckantoolbox import ckanconv, filestores
 conv = custom_conv(baseconv, ckanconv, states)
 groups_title = [
     u"Agriculture et Alimentation",
-    u"Culture et Alimentation",
+    u"Culture",
     u"Économie et Emploi",
     u"Égalité Femmes-Hommes",
     u"Éducation et Recherche",
