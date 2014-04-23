@@ -37,6 +37,8 @@ import urlparse
 
 from biryani1 import baseconv, custom_conv, datetimeconv, jsonconv, states
 
+from . import helpers
+
 
 conv = custom_conv(baseconv, datetimeconv, jsonconv, states)
 format_by_mimetype = {
@@ -44,6 +46,7 @@ format_by_mimetype = {
     u'application/octet-stream': None,
     u'application/pdf': u'PDF',
     u'application/vnd.ms-excel': u'XLS',
+    u'application/vnd.openxmlformats-officedocument.wordprocessingml.document': u'DOC',  # u'DOCX',
     }
 frequency_by_accrualperiodicity = {
     u'Annuel': u"annuelle",
@@ -57,7 +60,7 @@ log = logging.getLogger(__name__)
 
 
 def add_dataset(dataset, dry_run, granularity_translations, harvester, license_id_by_license, publishers_to_ignore,
-        source_site_url, territorial_collectivity , territory_by_tag_name):
+        source_site_url, territorial_collectivity, territorial_coverage, territory_by_tag_name):
     metas = dataset['metas']
     tags_name = metas[u'keyword'] or []
 
@@ -122,6 +125,8 @@ def add_dataset(dataset, dry_run, granularity_translations, harvester, license_i
             for tag_name in sorted(tags_name)
             if tag_name not in territory_by_tag_name
             ],
+        temporal_coverage_from = metas[u'temporal_coverage_from'],
+        temporal_coverage_to = metas[u'temporal_coverage_to'],
         territorial_coverage = u','.join(
             territory
             for territory in (
@@ -129,7 +134,7 @@ def add_dataset(dataset, dry_run, granularity_translations, harvester, license_i
                 for tag_name in sorted(tags_name)
                 )
             if territory is not None
-            ),
+            ) or territorial_coverage,
         territorial_coverage_granularity = granularity_translations.get(metas[u'granularity']),
         title = metas[u'title'],
         url = urlparse.urljoin(source_site_url, u'explore/dataset/{}/'.format(dataset[u'datasetid'])),
@@ -148,11 +153,15 @@ def add_dataset(dataset, dry_run, granularity_translations, harvester, license_i
 
     if not dry_run:
         groups = []
-        if metas[u'theme'] is not None:
-            groups.append(harvester.upsert_group(dict(
-                title = metas[u'theme'],
-                )))
-        if territorial_collectivity:
+        themes = metas[u'theme']
+        if themes is not None:
+            groups.extend(
+                harvester.upsert_group(dict(
+                    title = theme,
+                    ))
+                for theme in themes
+                )
+        if territorial_collectivity and (themes is None or u'Territoires et Transports' not in themes):
             groups.append(harvester.upsert_group(dict(
                 title = u'Territoires et Transports',
                 )))
@@ -170,238 +179,278 @@ def html_to_markdown(value, state = None):
     return stdout.decode('utf-8'), None
 
 
-def make_json_to_dataset(creators, domain, granularity_translations, license_id_by_license, temporals):
-    return conv.pipe(
-        conv.test_isinstance(dict),
-        conv.struct(
-            dict(
-                attachments = conv.pipe(
-                    conv.test_isinstance(list),
-                    conv.uniform_sequence(
-                        conv.pipe(
-                            conv.test_isinstance(dict),
-                            conv.struct(
-                                dict(
-                                    id = conv.pipe(
-                                        conv.test_isinstance(basestring),
-                                        conv.empty_to_none,
-                                        conv.not_none,
-                                        ),
-                                    mimetype = conv.pipe(
-                                        conv.test_isinstance(basestring),
-                                        conv.test_in(format_by_mimetype),
-                                        conv.not_none,
-                                        ),
-                                    title = conv.pipe(
-                                        conv.test_isinstance(basestring),
-                                        conv.cleanup_line,
-                                        conv.not_none,
-                                        ),
-                                    url = conv.pipe(
-                                        conv.test_isinstance(basestring),
-                                        conv.make_input_to_url(full = True, schemes = ('odsfile',)),
-                                        conv.test(lambda url: url.startswith(u'odsfile://{}/'.format(domain))),
-                                        conv.not_none,
+def make_json_to_dataset(creators, domain, granularity_translations, group_title_translations, license_id_by_license,
+        temporals):
+    def json_to_dataset(value, state = None):
+        dataset, errors = conv.pipe(
+            conv.test_isinstance(dict),
+            conv.struct(
+                dict(
+                    attachments = conv.pipe(
+                        conv.test_isinstance(list),
+                        conv.uniform_sequence(
+                            conv.pipe(
+                                conv.test_isinstance(dict),
+                                conv.struct(
+                                    dict(
+                                        id = conv.pipe(
+                                            conv.test_isinstance(basestring),
+                                            conv.empty_to_none,
+                                            conv.not_none,
+                                            ),
+                                        mimetype = conv.pipe(
+                                            conv.test_isinstance(basestring),
+                                            conv.test_in(format_by_mimetype),
+                                            conv.not_none,
+                                            ),
+                                        title = conv.pipe(
+                                            conv.test_isinstance(basestring),
+                                            conv.cleanup_line,
+                                            conv.not_none,
+                                            ),
+                                        url = conv.pipe(
+                                            conv.test_isinstance(basestring),
+                                            conv.make_input_to_url(full = True, schemes = ('odsfile',)),
+#                                            conv.test(lambda url: url.startswith(u'odsfile://{}/'.format(domain))),
+                                            conv.not_none,
+                                            ),
                                         ),
                                     ),
+                                conv.not_none,
                                 ),
-                            conv.not_none,
                             ),
+                        conv.not_none,
                         ),
-                    conv.not_none,
-                    ),
-                datasetid = conv.pipe(
-                    conv.test_isinstance(basestring),
-                    conv.empty_to_none,
-                    conv.not_none,
-                    ),
-                features = conv.pipe(
-                    conv.test_isinstance(list),
-                    conv.uniform_sequence(
-                        conv.pipe(
-                            conv.test_isinstance(basestring),
-                            conv.test_in([
-                                u'analyze',
-                                u'geo',
-                                u'timeserie',
-                                ]),
-                            conv.not_none,
+                    datasetid = conv.pipe(
+                        conv.test_isinstance(basestring),
+                        conv.empty_to_none,
+                        conv.not_none,
+                        ),
+                    features = conv.pipe(
+                        conv.test_isinstance(list),
+                        conv.uniform_sequence(
+                            conv.pipe(
+                                conv.test_isinstance(basestring),
+                                conv.test_in([
+                                    u'analyze',
+                                    u'geo',
+                                    u'image',
+                                    u'timeserie',
+                                    ]),
+                                conv.not_none,
+                                ),
                             ),
+                        conv.not_none,
                         ),
-                    conv.not_none,
-                    ),
-                fields = conv.pipe(
-                    conv.test_isinstance(list),
-                    conv.uniform_sequence(
-                        conv.pipe(
-                            conv.test_isinstance(dict),
-                            # TODO
-                            conv.not_none,
+                    fields = conv.pipe(
+                        conv.test_isinstance(list),
+                        conv.uniform_sequence(
+                            conv.pipe(
+                                conv.test_isinstance(dict),
+                                # TODO
+                                conv.not_none,
+                                ),
                             ),
+                        conv.not_none,
                         ),
-                    conv.not_none,
-                    ),
-                has_records = conv.pipe(
-                    conv.test_isinstance(bool),
-                    conv.not_none,
-                    ),
-#                interop_metas = conv.pipe(
-#                    conv.test_isinstance(dict),
-#                    conv.struct(
-#                        dict(
-#                            dcat = conv.pipe(
-#                                conv.test_isinstance(dict),
-#                                conv.struct(
-#                                    dict(
-#                                        created = conv.pipe(
-#                                            conv.test_isinstance(basestring),
-#                                            conv.iso8601_input_to_date,
-#                                            conv.date_to_iso8601_str,
-#                                            ),
-#                                        granularity = conv.pipe(
-#                                            conv.test_isinstance(basestring),
-#                                            conv.cleanup_line,
-#                                            conv.test_in(granularity_translations),
-#                                            ),
-#                                        issued = conv.pipe(
-#                                            conv.test_isinstance(basestring),
-#                                            conv.iso8601_input_to_date,
-#                                            conv.date_to_iso8601_str,
-#                                            ),
-#                                        spatial = conv.pipe(
-#                                            conv.test_isinstance(basestring),
-#                                            conv.make_input_to_url(full = True),
+                    has_records = conv.pipe(
+                        conv.test_isinstance(bool),
+                        conv.not_none,
+                        ),
+#                    interop_metas = conv.pipe(
+#                        conv.test_isinstance(dict),
+#                        conv.struct(
+#                            dict(
+#                                dcat = conv.pipe(
+#                                    conv.test_isinstance(dict),
+#                                    conv.struct(
+#                                        dict(
+#                                            created = conv.pipe(
+#                                                conv.test_isinstance(basestring),
+#                                                conv.iso8601_input_to_date,
+#                                                conv.date_to_iso8601_str,
+#                                                ),
+#                                            granularity = conv.pipe(
+#                                                conv.test_isinstance(basestring),
+#                                                conv.cleanup_line,
+#                                                conv.test_in(granularity_translations),
+#                                                ),
+#                                            issued = conv.pipe(
+#                                                conv.test_isinstance(basestring),
+#                                                conv.iso8601_input_to_date,
+#                                                conv.date_to_iso8601_str,
+#                                                ),
+#                                            spatial = conv.pipe(
+#                                                conv.test_isinstance(basestring),
+#                                                conv.make_input_to_url(full = True),
+#                                                ),
 #                                            ),
 #                                        ),
+#                                    conv.not_none,
 #                                    ),
-#                                conv.not_none,
 #                                ),
 #                            ),
+#                        conv.not_none,
 #                        ),
-#                    conv.not_none,
-#                    ),
-                metas = conv.pipe(
-                    conv.test_isinstance(dict),
-                    conv.struct(
-                        dict(
-                            accrualperiodicity = conv.pipe(
-                                conv.test_isinstance(basestring),
-                                conv.test_in(frequency_by_accrualperiodicity),
-                                ),
-                            created = conv.pipe(
-                                conv.test_isinstance(basestring),
-                                conv.iso8601_input_to_date,
-                                conv.date_to_iso8601_str,
-                                ),
-                            creator = conv.pipe(
-                                conv.test_isinstance(basestring),
-                                conv.cleanup_line,
-                                conv.test_in(creators),
-                                ),
-                            description = conv.pipe(
-                                conv.test_isinstance(basestring),
-                                html_to_markdown,
-                                conv.cleanup_text,
-                                ),
-                            domain = conv.pipe(
-                                conv.test_isinstance(basestring),
-                                conv.test_equals(domain),
-                                conv.not_none,
-                                ),
-                            granularity = conv.pipe(
-                                conv.test_isinstance(basestring),
-                                conv.cleanup_line,
-                                conv.test_in(granularity_translations),
-                                ),
-                            issued = conv.pipe(
-                                conv.test_isinstance(basestring),
-                                conv.iso8601_input_to_date,
-                                conv.date_to_iso8601_str,
-                                ),
-                            keyword = conv.pipe(
-                                conv.make_item_to_singleton(),
-                                conv.uniform_sequence(
-                                    conv.pipe(
-                                        conv.test_isinstance(basestring),
-                                        conv.input_to_slug,
-                                        conv.not_none,
+                    metas = conv.pipe(
+                        conv.test_isinstance(dict),
+                        conv.struct(
+                            dict(
+                                accrualperiodicity = conv.pipe(
+                                    conv.test_isinstance(basestring),
+                                    conv.test_in(frequency_by_accrualperiodicity),
+                                    ),
+                                created = conv.pipe(
+                                    conv.test_isinstance(basestring),
+                                    conv.iso8601_input_to_date,
+                                    conv.date_to_iso8601_str,
+                                    ),
+                                creator = conv.pipe(
+                                    conv.test_isinstance(basestring),
+                                    conv.cleanup_line,
+                                    conv.test_in(creators),
+                                    ),
+                                description = conv.pipe(
+                                    conv.test_isinstance(basestring),
+                                    html_to_markdown,
+                                    conv.cleanup_text,
+                                    ),
+                                domain = conv.pipe(
+                                    conv.test_isinstance(basestring),
+                                    conv.test_equals(domain),
+                                    conv.not_none,
+                                    ),
+                                granularity = conv.pipe(
+                                    conv.test_isinstance(basestring),
+                                    conv.cleanup_line,
+                                    conv.test_in(granularity_translations),
+                                    ),
+                                issued = conv.pipe(
+                                    conv.test_isinstance(basestring),
+                                    conv.iso8601_input_to_date,
+                                    conv.date_to_iso8601_str,
+                                    ),
+                                keyword = conv.pipe(
+                                    conv.make_item_to_singleton(),
+                                    conv.uniform_sequence(
+                                        conv.pipe(
+                                            conv.test_isinstance(basestring),
+                                            conv.input_to_slug,
+                                            ),
+                                        drop_none_items = True,
                                         ),
+                                    conv.empty_to_none,
+                                    ),
+                                language = conv.pipe(
+                                    conv.test_isinstance(basestring),
+                                    conv.input_to_slug,
+                                    conv.translate({
+                                        u'7-jours-a-partir-de-la-date-de-publication': None,
+                                        u'francais': u'fr',
+                                        }),
+                                    conv.test_in([u'en', u'fr', u'nl']),
+                                    ),
+                                license = conv.pipe(
+                                    conv.test_isinstance(basestring),
+                                    conv.test_in(license_id_by_license),
+                                    conv.not_none,
+                                    ),
+                                modified = conv.pipe(
+                                    conv.test_isinstance(basestring),
+                                    conv.iso8601_input_to_datetime,
+                                    conv.datetime_to_iso8601_str,
+                                    conv.not_none,
+                                    ),
+                                publisher = conv.pipe(
+                                    conv.test_isinstance(basestring),
+#                                    conv.test_in(author_by_publisher),
+                                    conv.not_none,
+                                    ),
+                                references = conv.pipe(
+                                    conv.test_isinstance(basestring),
+#                                    conv.make_input_to_url(full = True),
+                                    conv.cleanup_line,
+                                    ),
+                                spatial = conv.pipe(
+                                    conv.test_isinstance(basestring),
+                                    conv.make_input_to_url(full = True),
+                                    ),
+                                temporal = conv.pipe(
+                                    conv.test_isinstance(basestring),
+                                    conv.cleanup_line,
+                                    conv.translate({
+                                        u'N/A': None,
+                                        }),
+                                    conv.test_in(temporals),
+                                    ),
+                                temporal_coverage_from = conv.pipe(
+                                    conv.test_isinstance(basestring),
+                                    conv.iso8601_input_to_date,
+                                    conv.date_to_iso8601_str,
+                                    ),
+                                temporal_coverage_to = conv.pipe(
+                                    conv.test_isinstance(basestring),
+                                    conv.iso8601_input_to_date,
+                                    conv.date_to_iso8601_str,
+                                    ),
+                                theme = conv.pipe(
+                                    conv.make_item_to_singleton(),
+                                    conv.uniform_sequence(
+                                        conv.pipe(
+                                            conv.test_isinstance(basestring),
+                                            conv.cleanup_line,
+                                            conv.translate(group_title_translations),
+                                            conv.test_in(helpers.groups_title),
+                                            ),
+                                        drop_none_items = True,
+                                        ),
+                                    conv.empty_to_none,
+                                    ),
+                                title = conv.pipe(
+                                    conv.test_isinstance(basestring),
+                                    conv.cleanup_line,
+                                    conv.not_none,
+                                    ),
+                                visibility = conv.pipe(
+                                    conv.test_isinstance(basestring),
+                                    conv.test_in([u'domain', u'public', u'restricted']),
+                                    conv.not_none,
                                     ),
                                 ),
-                            language = conv.pipe(
-                                conv.test_isinstance(basestring),
-                                conv.translate({
-                                    u'7 jours à partir de la date de publication': None,
-                                    }),
-                                conv.test_in([u'FR', u'fr', u'Français']),
-                                ),
-                            license = conv.pipe(
-                                conv.test_isinstance(basestring),
-                                conv.test_in(license_id_by_license),
-                                conv.not_none,
-                                ),
-                            modified = conv.pipe(
-                                conv.test_isinstance(basestring),
-                                conv.iso8601_input_to_datetime,
-                                conv.datetime_to_iso8601_str,
-                                conv.not_none,
-                                ),
-                            publisher = conv.pipe(
-                                conv.test_isinstance(basestring),
-#                                conv.test_in(author_by_publisher),
-                                conv.not_none,
-                                ),
-                            references = conv.pipe(
-                                conv.test_isinstance(basestring),
-                                conv.make_input_to_url(full = True),
-                                ),
-                            spatial = conv.pipe(
-                                conv.test_isinstance(basestring),
-                                conv.make_input_to_url(full = True),
-                                ),
-                            temporal = conv.pipe(
-                                conv.test_isinstance(basestring),
-                                conv.cleanup_line,
-                                conv.translate({
-                                    u'N/A': None,
-                                    }),
-                                conv.test_in(temporals),
-                                ),
-                            theme = conv.pipe(
-                                conv.test_isinstance(basestring),
-                                conv.cleanup_line,
-                                ),
-                            title = conv.pipe(
-                                conv.test_isinstance(basestring),
-                                conv.cleanup_line,
-                                conv.not_none,
-                                ),
-                            visibility = conv.pipe(
-                                conv.test_isinstance(basestring),
-                                conv.test_in([u'domain', u'public']),
-                                conv.not_none,
-                                ),
                             ),
+                        conv.not_none,
                         ),
-                    conv.not_none,
-                    ),
-                shape = conv.pipe(
-                    conv.test_isinstance(dict),
-                    # TODO
+                    shape = conv.pipe(
+                        conv.test_isinstance(dict),
+                        # TODO
+                        ),
                     ),
                 ),
-            ),
-        )
+            )(value, state = state or conv.default_state)
+        if (errors is None or errors.get('metas', {}).get('visibility') is None) \
+                and dataset['metas']['visibility'] == u'restricted':
+            # Skip restricted dataset, even when it contains errors.
+            return None, None
+        return dataset, errors
+
+    return json_to_dataset
 
 
-def retrieve_datasets(source_headers, source_site_url):
+def retrieve_datasets(source_headers, source_site_url, api_key = None):
     # Retrieve list of packages in source.
     log.info(u'Retrieving list of source packages')
     datasets = []
     while True:
-        request = urllib2.Request(urlparse.urljoin(source_site_url,
-            u'api/datasets/1.0/search/?start={}'.format(len(datasets))), headers = source_headers)
-#            u'api/datasets/1.0/search/?start={}&interopmetas=true'.format(len(datasets))), headers = source_headers)
+        request = urllib2.Request(
+            urlparse.urljoin(
+                source_site_url,
+#                u'api/datasets/1.0/search/?{}start={}&interopmetas=true'.format(
+                u'api/datasets/1.0/search/?{}start={}'.format(
+                    u'apikey={}&'.format(api_key) if api_key is not None else u'',
+                    len(datasets),
+                    ),
+                ),
+            headers = source_headers)
         response = urllib2.urlopen(request)
         response_dict = conv.check(conv.pipe(
             conv.make_input_to_json(),
