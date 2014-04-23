@@ -101,7 +101,7 @@ def main():
 
     harvester = helpers.Harvester(
         supplier_abbreviation = u'mesr',
-        supplier_title = u'Ministère de l’Enseignement Supérieur et de la Recherche',
+        supplier_title = u'Enseignement Supérieur et Recherche',
         target_headers = {
             'Authorization': conf['ckan.api_key'],
             'User-Agent': conf['user_agent'],
