@@ -44,28 +44,20 @@ from . import opendatasoftcommon, helpers
 app_name = os.path.splitext(os.path.basename(__file__))[0]
 conv = custom_conv(baseconv, states)
 granularity_translations = {
-#    u'Gare': u'poi',
-#    u'Gare Transilien (Ile-de-France)': u'poi',
-#    u'Ligne du réseau Transilien (Ile-de-France)': u'poi',
-#    u'Par gare': u'poi',
-#    u'Par gare et train TER': u'poi',
     }
 license_id_by_license = {
     u'Licence open data SNCF': u'other-open',
     u'Licence oiuverte': u'fr-lo',
+    u'Licence Ouverte': u'fr-lo',
     u'Licence ouverte': u'fr-lo',
     u'ODbL': u'odc-odbl',
     u'ODbL Paris': u'odc-odbl',
     u'Open Data Paris': u'odc-odbl',
-#    u'Données Confidentielles': u'other-closed',
-#    u'SNCF Open Data': u'other-open',
-#    u"Open Data Commons Open Database License (ODbL)": u'odc-odbl',
-#    u'Open Database License (ODbL)': u'odc-odbl',
+    u'Open data Paris': u'odc-odbl',
+    u'SNCF Open Data': u'other-open',
     }
 log = logging.getLogger(app_name)
 territory_by_tag_name = {
-#    u'france': u'Country/FR/FRANCE',
-#    u'ile-de-france': u'RegionOfFrance/11/ILE DE FRANCE',
     }
 
 
@@ -112,7 +104,7 @@ def main():
 
     harvester = helpers.Harvester(
         supplier_abbreviation = u'idf',
-        supplier_title = u'Île-de-France Open Data',
+        supplier_title = u'Région Île-de-France',
         target_headers = {
             'Authorization': conf['ckan.api_key'],
             'User-Agent': conf['user_agent'],
@@ -139,18 +131,37 @@ def main():
                     ],
                 domain = u'datailedefrance',
                 granularity_translations = granularity_translations,
+                group_title_translations = {
+                    u'Administration': u"Société",
+                    u'Aménagement du territoire': u"Territoires et Transports",
+                    u'Assemblée régionale': u"Territoires et Transports",
+                    u'Bâtiment - équipements': u"Logement, Développement durable et Énergie",
+                    u'Cadre de vie - environnement': u"Logement, Développement durable et Énergie",
+                    u'Déplacements - transports': u"Territoires et Transports",
+                    u'Emploi': u'Économie et Emploi',
+                    u'Enseignement - formation - recherche': u"Éducation et Recherche",
+                    u'Finances publiques': u'Économie et Emploi',
+                    u'Justice': u"Société",
+                    u'Logement - santé - social': u"Santé et Social",
+                    u'Sport - tourisme - loisirs': u"Société",
+                    u'Vie culturelle': u"Culture",
+                    u'Vie économique - innovation': u"Économie et Emploi",
+                    u'Vie sociale': u"Société",
+                    u'Vie urbaine': u"Territoires et Transports",
+                    },
                 license_id_by_license = license_id_by_license,
                 temporals = [
                     ],
                 ),
             )(entry, state = conv.default_state)
+        if dataset is None:
+            continue
         metas = dataset['metas']
 
         tags_name = metas[u'keyword']
         all_tags_name.update(tags_name or [])
 
         opendatasoftcommon.add_dataset(
-            territorial_collectivity = True,
             dataset = dataset,
             dry_run = args.dry_run,
             harvester = harvester,
@@ -160,6 +171,8 @@ def main():
 #                u"OpenStreetMap",
                 ]),
             source_site_url = source_site_url,
+            territorial_collectivity = True,
+            territorial_coverage = u'RegionOfFrance/11/ILE DE FRANCE',
             territory_by_tag_name = territory_by_tag_name,
             )
 
