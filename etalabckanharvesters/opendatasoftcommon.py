@@ -46,6 +46,7 @@ format_by_mimetype = {
     u'application/octet-stream': None,
     u'application/pdf': u'PDF',
     u'application/vnd.ms-excel': u'XLS',
+    u'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': u'XLS',  # u'XLSX',
     u'application/vnd.openxmlformats-officedocument.wordprocessingml.document': u'DOC',  # u'DOCX',
     }
 frequency_by_accrualperiodicity = {
@@ -117,7 +118,7 @@ def add_dataset(dataset, dry_run, granularity_translations, harvester, license_i
     package = dict(
         author = author,
         frequency = frequency_by_accrualperiodicity.get(metas[u'accrualperiodicity']),
-        license_id = license_id_by_license[metas[u'license']],
+        license_id = license_id_by_license[metas[u'license']] if metas[u'license'] is not None else None,
         notes = metas[u'description'],
         resources = resources,
         tags = [
@@ -180,7 +181,7 @@ def html_to_markdown(value, state = None):
 
 
 def make_json_to_dataset(creators, domain, granularity_translations, group_title_translations, license_id_by_license,
-        temporals):
+        temporals, default_publisher = None):
     def json_to_dataset(value, state = None):
         dataset, errors = conv.pipe(
             conv.test_isinstance(dict),
@@ -353,7 +354,6 @@ def make_json_to_dataset(creators, domain, granularity_translations, group_title
                                 license = conv.pipe(
                                     conv.test_isinstance(basestring),
                                     conv.test_in(license_id_by_license),
-                                    conv.not_none,
                                     ),
                                 modified = conv.pipe(
                                     conv.test_isinstance(basestring),
@@ -364,8 +364,9 @@ def make_json_to_dataset(creators, domain, granularity_translations, group_title
                                 publisher = conv.pipe(
                                     conv.test_isinstance(basestring),
 #                                    conv.test_in(author_by_publisher),
-                                    conv.not_none,
+                                    conv.not_none if default_publisher is None else conv.default(default_publisher),
                                     ),
+                                records_count = conv.test_isinstance(int),
                                 references = conv.pipe(
                                     conv.test_isinstance(basestring),
 #                                    conv.make_input_to_url(full = True),
