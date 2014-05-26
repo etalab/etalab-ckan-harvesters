@@ -133,18 +133,27 @@ def main():
                     ],
                 domain = u'datasncf',
                 granularity_translations = granularity_translations,
+                group_title_translations = {
+                    u'Comptage et flux': u"Territoires et Transports",
+                    u'Equipements et services en gare': u"Territoires et Transports",
+                    u"Gares et points d'arrêt": u"Territoires et Transports",
+                    u'Horaires et itinéraires': u"Territoires et Transports",
+                    u'Qualité de service': u"Territoires et Transports",
+                    u'Tarification': u"Territoires et Transports",
+                    },
                 license_id_by_license = license_id_by_license,
                 temporals = [
                     ],
                 ),
             )(entry, state = conv.default_state)
+        if dataset is None:
+            continue
         metas = dataset['metas']
 
         tags_name = metas[u'keyword']
         all_tags_name.update(tags_name or [])
 
         opendatasoftcommon.add_dataset(
-            territorial_collectivity = False,
             dataset = dataset,
             dry_run = args.dry_run,
             harvester = harvester,
@@ -154,6 +163,8 @@ def main():
                 u"OpenStreetMap",
                 ]),
             source_site_url = source_site_url,
+            territorial_collectivity = False,
+            territorial_coverage = None,
             territory_by_tag_name = territory_by_tag_name,
             )
 

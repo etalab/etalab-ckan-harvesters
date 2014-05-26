@@ -48,6 +48,7 @@ format_by_mimetype = {
     u'application/vnd.ms-excel': u'XLS',
     u'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': u'XLS',  # u'XLSX',
     u'application/vnd.openxmlformats-officedocument.wordprocessingml.document': u'DOC',  # u'DOCX',
+    u'application/zip': None,
     }
 frequency_by_accrualperiodicity = {
     u'Annuel': u"annuelle",
